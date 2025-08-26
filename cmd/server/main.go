@@ -6,8 +6,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
-	"strings"
 	"syscall"
 	"time"
 
@@ -96,37 +94,6 @@ func main() {
 			pr.Get("/journal", journalHandler.List)
 		})
 	})
-
-	staticDir := mustGetenv("STATIC_DIR", "../frontend/out")
-	spa := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requestedPath := filepath.Clean(r.URL.Path)
-		rel := strings.TrimPrefix(requestedPath, "/")
-		if rel == "" {
-			rel = "index.html"
-		}
-		candidate := filepath.Join(staticDir, rel)
-		if info, err := os.Stat(candidate); err == nil {
-			if info.IsDir() {
-				index := filepath.Join(candidate, "index.html")
-				if _, err := os.Stat(index); err == nil {
-					http.ServeFile(w, r, index)
-					return
-				}
-			} else {
-				http.ServeFile(w, r, candidate)
-				return
-			}
-		}
-		if !strings.Contains(filepath.Base(rel), ".") {
-			htmlPath := filepath.Join(staticDir, rel+".html")
-			if _, err := os.Stat(htmlPath); err == nil {
-				http.ServeFile(w, r, htmlPath)
-				return
-			}
-		}
-		http.ServeFile(w, r, filepath.Join(staticDir, "index.html"))
-	})
-	r.Handle("/*", spa)
 
 	srv := &http.Server{Addr: ":" + port, Handler: r}
 	go func() {
