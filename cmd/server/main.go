@@ -78,7 +78,6 @@ func main() {
 	}))
 
 	authHandler := handlers.NewAuthHandler(dbConn, []byte(jwtSecret))
-	progressHandler := handlers.NewProgressHandler(dbConn)
 	journalHandler := handlers.NewJournalHandler(dbConn)
 	authMW := mw.NewAuthMiddleware([]byte(jwtSecret))
 
@@ -87,9 +86,6 @@ func main() {
 		api.Post("/auth/login", authHandler.Login)
 		api.Group(func(pr chi.Router) {
 			pr.Use(authMW.RequireAuth)
-			pr.Get("/progress", progressHandler.GetSummary)
-			pr.Post("/progress", progressHandler.AddProgress)
-			pr.Get("/progress/report", progressHandler.GetReport)
 			pr.Post("/journal", journalHandler.AddToday)
 			pr.Get("/journal", journalHandler.List)
 		})
