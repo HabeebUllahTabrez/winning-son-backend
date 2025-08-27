@@ -47,7 +47,7 @@ func (h *AuthHandler) Signup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var user models.User
-	err = h.db.QueryRowx(`INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email, password_hash, created_at`, c.Email, string(hashed)).StructScan(&user)
+	err = h.db.QueryRowx(`INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email, password_hash, created_at, first_name, last_name, avatar_id, goal, start_date, end_date, is_admin`, c.Email, string(hashed)).StructScan(&user)
 	if err != nil {
 		http.Error(w, "could not create user", http.StatusBadRequest)
 		return
@@ -74,7 +74,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var user models.User
-	err := h.db.Get(&user, `SELECT id, email, password_hash, created_at FROM users WHERE email=$1`, c.Email)
+	err := h.db.Get(&user, `SELECT id, email, password_hash, created_at, first_name, last_name, avatar_id, goal, start_date, end_date, is_admin FROM users WHERE email=$1`, c.Email)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			http.Error(w, "invalid credentials", http.StatusUnauthorized)
