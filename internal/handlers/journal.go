@@ -15,37 +15,62 @@ type JournalHandler struct {
 func NewJournalHandler(db *sqlx.DB) *JournalHandler { return &JournalHandler{db: db} }
 
 type journalRequest struct {
-	Topics string `json:"topics"`
-	Rating int    `json:"rating"`
+	Topics    string `json:"topics"`
+	Rating    int    `json:"rating"`
+	LocalDate string `json:"local_date"` // YYYY-MM-DD provided by frontend
 }
 
-func (h *JournalHandler) AddToday(w http.ResponseWriter, r *http.Request) {
+// UpsertEntry creates a new journal entry or updates an existing one for the same user and local date
+func (h *JournalHandler) UpsertEntry(w http.ResponseWriter, r *http.Request) {
 	userID := r.Context().Value("userID").(int)
 	var req journalRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Topics == "" || req.Rating < 1 || req.Rating > 10 {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Topics == "" || req.Rating < 1 || req.Rating > 10 || req.LocalDate == "" {
 		http.Error(w, "invalid body", http.StatusBadRequest)
 		return
 	}
-	today := time.Now().UTC().Truncate(24 * time.Hour)
-	_, err := h.db.Exec(`INSERT INTO journal_entries (user_id, date, topics, rating) VALUES ($1, $2, $3, $4)
-	                      ON CONFLICT (user_id, date) DO UPDATE SET topics = EXCLUDED.topics, rating = EXCLUDED.rating`,
-		userID, today, req.Topics, req.Rating)
+
+	// Parse the provided local_date (YYYY-MM-DD)
+	parsedLocalDate, err := time.Parse("2006-01-02", req.LocalDate)
+	if err != nil {
+		http.Error(w, "invalid local_date format; expected YYYY-MM-DD", http.StatusBadRequest)
+		return
+	}
+
+	// Use UPSERT to either insert new entry or update existing one
+	var isUpdate bool
+	err = h.db.QueryRow(`INSERT INTO journal_entries (user_id, local_date, topics, rating, updated_at) 
+	                      VALUES ($1, $2, $3, $4, NOW())
+	                      ON CONFLICT (user_id, local_date) 
+	                      DO UPDATE SET 
+	                        topics = EXCLUDED.topics, 
+	                        rating = EXCLUDED.rating, 
+	                        updated_at = NOW()
+	                      RETURNING (xmax = 0)`, userID, parsedLocalDate, req.Topics, req.Rating).Scan(&isUpdate)
 	if err != nil {
 		http.Error(w, "could not save", http.StatusInternalServerError)
 		return
 	}
-	w.WriteHeader(http.StatusNoContent)
+
+	// Return success with the local date that was used
+	response := map[string]interface{}{
+		"message":    "Entry saved successfully",
+		"local_date": parsedLocalDate.Format("2006-01-02"),
+		"is_update":  !isUpdate, // xmax = 0 means it was an INSERT, otherwise UPDATE
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }
 
 type journalEntry struct {
-	Date   string `json:"date"`
-	Topics string `json:"topics"`
-	Rating int    `json:"rating"`
+	LocalDate string `json:"local_date"`
+	Topics    string `json:"topics"`
+	Rating    int    `json:"rating"`
 }
 
 func (h *JournalHandler) List(w http.ResponseWriter, r *http.Request) {
 	userID := r.Context().Value("userID").(int)
-	rows, err := h.db.Queryx(`SELECT date, topics, rating FROM journal_entries WHERE user_id=$1 ORDER BY date DESC LIMIT 100`, userID)
+	rows, err := h.db.Queryx(`SELECT local_date, topics, rating FROM journal_entries WHERE user_id=$1 ORDER BY local_date DESC LIMIT 100`, userID)
 	if err != nil {
 		http.Error(w, "could not fetch", http.StatusInternalServerError)
 		return
@@ -57,7 +82,7 @@ func (h *JournalHandler) List(w http.ResponseWriter, r *http.Request) {
 		var t string
 		var r8 int
 		if err := rows.Scan(&d, &t, &r8); err == nil {
-			out = append(out, journalEntry{Date: d.Format("2006-01-02"), Topics: t, Rating: r8})
+			out = append(out, journalEntry{LocalDate: d.Format("2006-01-02"), Topics: t, Rating: r8})
 		}
 	}
 	json.NewEncoder(w).Encode(out)
