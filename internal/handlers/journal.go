@@ -149,5 +149,6 @@ func (h *JournalHandler) List(w http.ResponseWriter, r *http.Request) {
 			out = append(out, journalEntry{LocalDate: d.Format("2006-01-02"), Topics: t, Rating: r8})
 		}
 	}
+	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(out)
 }
