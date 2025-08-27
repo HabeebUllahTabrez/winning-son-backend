@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"time"
 
+	"winsonin/internal/models"
+
 	"github.com/jmoiron/sqlx"
 )
 
@@ -31,12 +33,20 @@ type dashboardResponse struct {
 	AverageMonthRating float64      `json:"average_month_rating"`
 	CurrentStreakDays  int          `json:"current_streak_days"`
 	Last7DaysTrend     []trendPoint `json:"last7_days_trend"`
+	User               models.User  `json:"user"`
 }
 
 // Get aggregates and useful metrics to power the dashboard.
 // Accepts optional query param: local_date=YYYY-MM-DD to use as the user's "today".
 func (h *DashboardHandler) Get(w http.ResponseWriter, r *http.Request) {
 	userID := r.Context().Value("userID").(int)
+
+	// Fetch basic user profile to include in dashboard
+	var user models.User
+	if err := h.db.Get(&user, `SELECT id, email, password_hash, created_at, first_name, last_name, avatar_id, goal, start_date, end_date, is_admin FROM users WHERE id=$1`, userID); err != nil {
+		http.Error(w, "could not fetch user", http.StatusInternalServerError)
+		return
+	}
 
 	// Determine reference date from query or default to CURRENT_DATE
 	refDateStr := r.URL.Query().Get("local_date")
@@ -132,6 +142,7 @@ func (h *DashboardHandler) Get(w http.ResponseWriter, r *http.Request) {
 		AverageMonthRating: avgMonth,
 		CurrentStreakDays:  streak,
 		Last7DaysTrend:     trend,
+		User:               user,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
