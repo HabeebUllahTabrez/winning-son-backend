@@ -79,6 +79,7 @@ func main() {
 
 	authHandler := handlers.NewAuthHandler(dbConn, []byte(jwtSecret))
 	journalHandler := handlers.NewJournalHandler(dbConn)
+	dashboardHandler := handlers.NewDashboardHandler(dbConn)
 	authMW := mw.NewAuthMiddleware([]byte(jwtSecret))
 
 	routeAPI := func(api chi.Router) {
@@ -89,6 +90,7 @@ func main() {
 			pr.Post("/journal", journalHandler.UpsertEntry)
 			pr.Delete("/journal", journalHandler.Delete)
 			pr.Get("/journal", journalHandler.List)
+			pr.Get("/dashboard", dashboardHandler.Get)
 		})
 	}
 
