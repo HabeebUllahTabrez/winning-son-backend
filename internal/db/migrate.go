@@ -28,5 +28,51 @@ CREATE TABLE IF NOT EXISTS journal_entries (
 );
 `
 	_, err := db.ExecContext(context.Background(), schema)
+	if err != nil {
+		return err
+	}
+
+	alters := `
+DO $$ BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='first_name'
+    ) THEN
+        ALTER TABLE users ADD COLUMN first_name TEXT;
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='last_name'
+    ) THEN
+        ALTER TABLE users ADD COLUMN last_name TEXT;
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='avatar_id'
+    ) THEN
+        ALTER TABLE users ADD COLUMN avatar_id INTEGER;
+    END IF;
+    -- Ensure default for avatar_id is 1 and backfill existing NULLs
+    ALTER TABLE users ALTER COLUMN avatar_id SET DEFAULT 1;
+    UPDATE users SET avatar_id = 1 WHERE avatar_id IS NULL;
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='goal'
+    ) THEN
+        ALTER TABLE users ADD COLUMN goal TEXT;
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='start_date'
+    ) THEN
+        ALTER TABLE users ADD COLUMN start_date DATE;
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='end_date'
+    ) THEN
+        ALTER TABLE users ADD COLUMN end_date DATE;
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='is_admin'
+    ) THEN
+        ALTER TABLE users ADD COLUMN is_admin BOOLEAN NOT NULL DEFAULT false;
+    END IF;
+END $$;`
+	_, err = db.ExecContext(context.Background(), alters)
 	return err
 }
