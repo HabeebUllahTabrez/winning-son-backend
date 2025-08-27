@@ -45,6 +45,24 @@ internal/
 - Set up your environment variables for database connection and other secrets as needed.
 - Update the configuration in `cmd/server/main.go` or use a `.env` file if supported.
 
+### CORS Configuration
+The API includes CORS middleware to handle cross-origin requests. By default, it allows requests from common development origins:
+- `http://localhost:3000`
+- `http://localhost:5173`
+- `http://127.0.0.1:3000`
+- `http://127.0.0.1:5173`
+
+To customize allowed origins, set the `ALLOWED_ORIGINS` environment variable with comma-separated values:
+```sh
+export ALLOWED_ORIGINS="http://localhost:3000,https://yourdomain.com"
+```
+
+The CORS configuration includes:
+- Allowed methods: GET, POST, PUT, DELETE, OPTIONS, PATCH
+- Allowed headers: Accept, Authorization, Content-Type, X-Requested-With, Origin
+- Credentials: true (for cookies/auth headers)
+- Max age: 300 seconds
+
 ### Database Migration
 Run migrations using:
 ```sh
