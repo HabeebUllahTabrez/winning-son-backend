@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -104,7 +105,36 @@ func (h *JournalHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 func (h *JournalHandler) List(w http.ResponseWriter, r *http.Request) {
 	userID := r.Context().Value("userID").(int)
-	rows, err := h.db.Queryx(`SELECT local_date, topics, rating FROM journal_entries WHERE user_id=$1 ORDER BY local_date DESC LIMIT 100`, userID)
+	// Optional query params: start_date, end_date (YYYY-MM-DD)
+	q := r.URL.Query()
+	startDateStr := q.Get("start_date")
+	endDateStr := q.Get("end_date")
+
+	where := "WHERE user_id=$1"
+	args := []interface{}{userID}
+
+	if startDateStr != "" {
+		startDate, err := time.Parse("2006-01-02", startDateStr)
+		if err != nil {
+			http.Error(w, "invalid start_date format; expected YYYY-MM-DD", http.StatusBadRequest)
+			return
+		}
+		args = append(args, startDate)
+		where += fmt.Sprintf(" AND local_date >= $%d", len(args))
+	}
+
+	if endDateStr != "" {
+		endDate, err := time.Parse("2006-01-02", endDateStr)
+		if err != nil {
+			http.Error(w, "invalid end_date format; expected YYYY-MM-DD", http.StatusBadRequest)
+			return
+		}
+		args = append(args, endDate)
+		where += fmt.Sprintf(" AND local_date <= $%d", len(args))
+	}
+
+	query := "SELECT local_date, topics, rating FROM journal_entries " + where + " ORDER BY local_date DESC LIMIT 100"
+	rows, err := h.db.Queryx(query, args...)
 	if err != nil {
 		http.Error(w, "could not fetch", http.StatusInternalServerError)
 		return
