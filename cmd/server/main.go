@@ -86,7 +86,7 @@ func main() {
 		api.Post("/auth/login", authHandler.Login)
 		api.Group(func(pr chi.Router) {
 			pr.Use(authMW.RequireAuth)
-			pr.Post("/journal", journalHandler.AddToday)
+			pr.Post("/journal", journalHandler.UpsertEntry)
 			pr.Get("/journal", journalHandler.List)
 		})
 	})
