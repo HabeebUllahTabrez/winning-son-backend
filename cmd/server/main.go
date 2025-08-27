@@ -81,15 +81,18 @@ func main() {
 	journalHandler := handlers.NewJournalHandler(dbConn)
 	authMW := mw.NewAuthMiddleware([]byte(jwtSecret))
 
-	r.Route("/api", func(api chi.Router) {
+	routeAPI := func(api chi.Router) {
 		api.Post("/auth/signup", authHandler.Signup)
 		api.Post("/auth/login", authHandler.Login)
 		api.Group(func(pr chi.Router) {
 			pr.Use(authMW.RequireAuth)
 			pr.Post("/journal", journalHandler.UpsertEntry)
+			pr.Delete("/journal", journalHandler.Delete)
 			pr.Get("/journal", journalHandler.List)
 		})
-	})
+	}
+
+	r.Route("/api", routeAPI)
 
 	srv := &http.Server{Addr: ":" + port, Handler: r}
 	go func() {
