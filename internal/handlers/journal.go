@@ -68,6 +68,40 @@ type journalEntry struct {
 	Rating    int    `json:"rating"`
 }
 
+// Delete removes a journal entry for the authenticated user by local_date (YYYY-MM-DD)
+func (h *JournalHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	userID := r.Context().Value("userID").(int)
+
+	// Expect JSON body: { "local_date": "YYYY-MM-DD" }
+	var body struct {
+		LocalDate string `json:"local_date"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.LocalDate == "" {
+		http.Error(w, "invalid body", http.StatusBadRequest)
+		return
+	}
+
+	// Parse and validate date
+	parsedLocalDate, err := time.Parse("2006-01-02", body.LocalDate)
+	if err != nil {
+		http.Error(w, "invalid local_date format; expected YYYY-MM-DD", http.StatusBadRequest)
+		return
+	}
+
+	res, err := h.db.Exec(`DELETE FROM journal_entries WHERE user_id = $1 AND local_date = $2`, userID, parsedLocalDate)
+	if err != nil {
+		http.Error(w, "could not delete", http.StatusInternalServerError)
+		return
+	}
+	rows, _ := res.RowsAffected()
+	if rows == 0 {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *JournalHandler) List(w http.ResponseWriter, r *http.Request) {
 	userID := r.Context().Value("userID").(int)
 	rows, err := h.db.Queryx(`SELECT local_date, topics, rating FROM journal_entries WHERE user_id=$1 ORDER BY local_date DESC LIMIT 100`, userID)
