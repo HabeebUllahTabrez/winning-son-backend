@@ -81,6 +81,7 @@ func main() {
 	journalHandler := handlers.NewJournalHandler(dbConn)
 	dashboardHandler := handlers.NewDashboardHandler(dbConn)
 	userHandler := handlers.NewUserHandler(dbConn)
+	adminHandler := handlers.NewAdminHandler(dbConn)
 	authMW := mw.NewAuthMiddleware([]byte(jwtSecret))
 
 	routeAPI := func(api chi.Router) {
@@ -94,6 +95,7 @@ func main() {
 			pr.Get("/dashboard", dashboardHandler.Get)
 			pr.Get("/me", userHandler.GetMe)
 			pr.Put("/me", userHandler.UpdateMe)
+			pr.Get("/admin/overview", adminHandler.Overview)
 		})
 	}
 
