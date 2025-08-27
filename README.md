@@ -46,7 +46,7 @@ internal/
 - Update the configuration in `cmd/server/main.go` or use a `.env` file if supported.
 
 ### CORS Configuration
-The API includes CORS middleware to handle cross-origin requests. By default, it allows requests from common development origins:
+The API uses the `github.com/go-chi/cors` middleware to handle cross-origin requests. By default, it allows requests from common development origins:
 - `http://localhost:3000`
 - `http://localhost:5173`
 - `http://127.0.0.1:3000`
@@ -60,6 +60,7 @@ export ALLOWED_ORIGINS="http://localhost:3000,https://yourdomain.com"
 The CORS configuration includes:
 - Allowed methods: GET, POST, PUT, DELETE, OPTIONS, PATCH
 - Allowed headers: Accept, Authorization, Content-Type, X-Requested-With, Origin
+- Exposed headers: Link, Content-Length, Content-Type
 - Credentials: true (for cookies/auth headers)
 - Max age: 300 seconds
 
