@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -68,14 +70,28 @@ func main() {
 	}
 
 	r := chi.NewRouter()
-	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"*"},
-		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
-		ExposedHeaders:   []string{"Link"},
+
+	// Get allowed origins from environment or use defaults
+	allowedOrigins := []string{"http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:3000", "http://127.0.0.1:5173"}
+	if origins := os.Getenv("ALLOWED_ORIGINS"); origins != "" {
+		// Split by comma if multiple origins are provided
+		allowedOrigins = []string{}
+		for _, origin := range strings.Split(origins, ",") {
+			allowedOrigins = append(allowedOrigins, strings.TrimSpace(origin))
+		}
+	}
+
+	// CORS middleware configuration
+	corsMiddleware := cors.Handler(cors.Options{
+		AllowedOrigins:   allowedOrigins,
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Requested-With", "Origin"},
+		ExposedHeaders:   []string{"Link", "Content-Length", "Content-Type"},
 		AllowCredentials: true,
 		MaxAge:           300,
-	}))
+	})
+
+	r.Use(corsMiddleware)
 
 	authHandler := handlers.NewAuthHandler(dbConn, []byte(jwtSecret))
 	journalHandler := handlers.NewJournalHandler(dbConn)
@@ -100,6 +116,12 @@ func main() {
 	}
 
 	r.Route("/api", routeAPI)
+
+	// Health check endpoint
+	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	})
 
 	srv := &http.Server{Addr: ":" + port, Handler: r}
 	go func() {
