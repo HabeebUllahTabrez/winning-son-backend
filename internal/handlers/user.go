@@ -26,7 +26,7 @@ func (h *UserHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(u)
+	json.NewEncoder(w).Encode(ToUserDTO(u))
 }
 
 // UpdateMe updates provided fields on the current user's profile
