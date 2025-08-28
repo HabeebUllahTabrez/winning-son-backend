@@ -33,7 +33,7 @@ type dashboardResponse struct {
 	AverageMonthRating float64      `json:"average_month_rating"`
 	CurrentStreakDays  int          `json:"current_streak_days"`
 	Last7DaysTrend     []trendPoint `json:"last7_days_trend"`
-	User               models.User  `json:"user"`
+	User               UserDTO      `json:"user"`
 }
 
 // Get aggregates and useful metrics to power the dashboard.
@@ -142,7 +142,7 @@ func (h *DashboardHandler) Get(w http.ResponseWriter, r *http.Request) {
 		AverageMonthRating: avgMonth,
 		CurrentStreakDays:  streak,
 		Last7DaysTrend:     trend,
-		User:               user,
+		User:               ToUserDTO(user),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
