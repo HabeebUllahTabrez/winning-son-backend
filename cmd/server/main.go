@@ -106,6 +106,7 @@ func main() {
 		api.Group(func(pr chi.Router) {
 			pr.Use(authMW.RequireAuth)
 			pr.Post("/journal", journalHandler.UpsertEntry)
+			pr.Post("/journal/migrate", journalHandler.MigrateEntries)
 			pr.Delete("/journal", journalHandler.Delete)
 			pr.Get("/journal", journalHandler.List)
 			pr.Get("/dashboard", dashboardHandler.Get)
