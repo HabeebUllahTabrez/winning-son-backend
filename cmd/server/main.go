@@ -98,15 +98,16 @@ func main() {
 	dashboardHandler := handlers.NewDashboardHandler(dbConn)
 	userHandler := handlers.NewUserHandler(dbConn)
 	adminHandler := handlers.NewAdminHandler(dbConn)
+	migrateHandler := handlers.NewMigrateHandler(dbConn)
 	authMW := mw.NewAuthMiddleware([]byte(jwtSecret))
 
 	routeAPI := func(api chi.Router) {
 		api.Post("/auth/signup", authHandler.Signup)
 		api.Post("/auth/login", authHandler.Login)
+		api.Post("/migrate", migrateHandler.MigrateData)
 		api.Group(func(pr chi.Router) {
 			pr.Use(authMW.RequireAuth)
 			pr.Post("/journal", journalHandler.UpsertEntry)
-			pr.Post("/journal/migrate", journalHandler.MigrateEntries)
 			pr.Delete("/journal", journalHandler.Delete)
 			pr.Get("/journal", journalHandler.List)
 			pr.Get("/dashboard", dashboardHandler.Get)
