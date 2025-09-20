@@ -104,9 +104,9 @@ func main() {
 	routeAPI := func(api chi.Router) {
 		api.Post("/auth/signup", authHandler.Signup)
 		api.Post("/auth/login", authHandler.Login)
-		api.Post("/migrate", migrateHandler.MigrateData)
 		api.Group(func(pr chi.Router) {
 			pr.Use(authMW.RequireAuth)
+			pr.Post("/migrate", migrateHandler.MigrateData)
 			pr.Post("/journal", journalHandler.UpsertEntry)
 			pr.Delete("/journal", journalHandler.Delete)
 			pr.Get("/journal", journalHandler.List)
