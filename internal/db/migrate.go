@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS journal_entries (
     topics TEXT NOT NULL,
     alignment_rating INTEGER NOT NULL CHECK (alignment_rating BETWEEN 1 AND 10),
     contentment_rating INTEGER NOT NULL CHECK (contentment_rating BETWEEN 1 AND 10),
+    karma REAL NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE(user_id, local_date)
@@ -91,6 +92,17 @@ DO $$ BEGIN
         SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='is_admin'
     ) THEN
         ALTER TABLE users ADD COLUMN is_admin BOOLEAN NOT NULL DEFAULT false;
+    END IF;
+END $$;
+DO $$ BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns WHERE table_name='journal_entries' AND column_name='karma'
+    ) THEN
+        ALTER TABLE journal_entries ADD COLUMN karma REAL NOT NULL DEFAULT 0;
+        
+        -- Backfill karma for existing entries
+        UPDATE journal_entries
+        SET karma = (alignment_rating + contentment_rating - 2) / 18.0;
     END IF;
 END $$;`
 	_, err = db.ExecContext(context.Background(), alters)
