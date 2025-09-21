@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -12,10 +11,12 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
 	"github.com/joho/godotenv"
+	"go.uber.org/zap"
 
 	"winsonin/internal/db"
 	"winsonin/internal/handlers"
@@ -33,43 +34,55 @@ func mustGetenv(key, fallback string) string {
 func main() {
 	_ = godotenv.Load()
 
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	slog.SetDefault(logger)
+	var logger *zap.Logger
+	var err error
+	appEnv := os.Getenv("APP_ENV")
+	if appEnv == "development" {
+		logger, err = zap.NewDevelopment()
+	} else {
+		logger, err = zap.NewProduction()
+	}
+	if err != nil {
+		panic("failed to initialize logger")
+	}
+	defer logger.Sync() // flushes buffer, if any
 
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
-		slog.Warn("DATABASE_URL not set; API will run but DB is unavailable")
+		logger.Warn("DATABASE_URL not set; API will run but DB is unavailable")
 	}
 
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
-		slog.Error("JWT_SECRET is required")
-		os.Exit(1)
+		logger.Fatal("JWT_SECRET is required")
 	}
 
 	port := mustGetenv("PORT", "8080")
 
 	var dbConn *sqlx.DB
-	var err error
 	if databaseURL != "" {
+		var err error
 		dbConn, err = sqlx.Open("pgx", databaseURL)
 		if err != nil {
-			slog.Error("failed to open db", slog.Any("err", err))
-			os.Exit(1)
+			logger.Fatal("failed to open db", zap.Error(err))
 		}
 		dbConn.SetMaxOpenConns(10)
 		dbConn.SetConnMaxLifetime(2 * time.Hour)
 		if err = dbConn.Ping(); err != nil {
-			slog.Error("failed to ping db", slog.Any("err", err))
-			os.Exit(1)
+			logger.Fatal("failed to ping db", zap.Error(err))
 		}
 		if err := db.RunMigrations(dbConn); err != nil {
-			slog.Error("failed migrations", slog.Any("err", err))
-			os.Exit(1)
+			logger.Fatal("failed migrations", zap.Error(err))
 		}
 	}
 
 	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	if appEnv == "development" {
+		r.Use(middleware.Logger)
+	} else {
+		r.Use(mw.StructuredLogger(logger))
+	}
 
 	// Get allowed origins from environment or use defaults
 	allowedOrigins := []string{"http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:3000", "http://127.0.0.1:5173"}
@@ -92,6 +105,11 @@ func main() {
 	})
 
 	r.Use(corsMiddleware)
+
+	// r.Get("/error", func(w http.ResponseWriter, r *http.Request) {
+	// 	logger.Error("this is a test error")
+	// 	http.Error(w, "internal server error", http.StatusInternalServerError)
+	// })
 
 	authHandler := handlers.NewAuthHandler(dbConn, []byte(jwtSecret))
 	journalHandler := handlers.NewJournalHandler(dbConn)
@@ -127,18 +145,18 @@ func main() {
 
 	srv := &http.Server{Addr: ":" + port, Handler: r}
 	go func() {
-		slog.Info("server starting", slog.String("addr", ":"+port))
+		logger.Info("server starting", zap.String("addr", ":"+port))
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			slog.Error("server error", slog.Any("err", err))
+			logger.Error("server error", zap.Error(err))
 		}
 	}()
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-	slog.Info("shutdown initiated")
+	logger.Info("shutdown initiated")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = srv.Shutdown(ctx)
-	slog.Info("server stopped")
+	logger.Info("server stopped")
 }
