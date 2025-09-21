@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -10,6 +11,13 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
+// Karma is a custom type to handle rounding to 2 decimal places in JSON
+type Karma float64
+
+func (k Karma) MarshalJSON() ([]byte, error) {
+	return []byte(fmt.Sprintf("%.2f", float64(k))), nil
+}
+
 type DashboardHandler struct {
 	db *sqlx.DB
 }
@@ -17,20 +25,20 @@ type DashboardHandler struct {
 func NewDashboardHandler(db *sqlx.DB) *DashboardHandler { return &DashboardHandler{db: db} }
 
 type trendPoint struct {
-	LocalDate string  `json:"local_date"`
-	Karma     float64 `json:"karma"`
+	LocalDate string `json:"local_date"`
+	Karma     Karma  `json:"karma"`
 }
 
 type dashboardResponse struct {
 	ReferenceDate     string       `json:"reference_date"`
 	HasTodayEntry     bool         `json:"has_today_entry"`
-	DayKarma          float64      `json:"day_karma"`
-	WeekKarma         float64      `json:"week_karma"`
-	MonthKarma        float64      `json:"month_karma"`
-	YearKarma         float64      `json:"year_karma"`
+	DayKarma          Karma        `json:"day_karma"`
+	WeekKarma         Karma        `json:"week_karma"`
+	MonthKarma        Karma        `json:"month_karma"`
+	YearKarma         Karma        `json:"year_karma"`
 	EntriesThisWeek   int          `json:"entries_this_week"`
 	EntriesThisYear   int          `json:"entries_this_year"`
-	AverageMonthKarma float64      `json:"average_month_karma"`
+	AverageMonthKarma Karma        `json:"average_month_karma"`
 	CurrentStreakDays int          `json:"current_streak_days"`
 	Last7DaysTrend    []trendPoint `json:"last7_days_trend"`
 	User              UserDTO      `json:"user"`
@@ -126,20 +134,20 @@ func (h *DashboardHandler) Get(w http.ResponseWriter, r *http.Request) {
 		var d time.Time
 		var p float64
 		if err := trendRows.Scan(&d, &p); err == nil {
-			trend = append(trend, trendPoint{LocalDate: d.Format("2006-01-02"), Karma: p})
+			trend = append(trend, trendPoint{LocalDate: d.Format("2006-01-02"), Karma: Karma(p)})
 		}
 	}
 
 	resp := dashboardResponse{
 		ReferenceDate:     refDate.Format("2006-01-02"),
 		HasTodayEntry:     hasToday,
-		DayKarma:          dayKarma,
-		WeekKarma:         weekKarma,
-		MonthKarma:        monthKarma,
-		YearKarma:         yearKarma,
+		DayKarma:          Karma(dayKarma),
+		WeekKarma:         Karma(weekKarma),
+		MonthKarma:        Karma(monthKarma),
+		YearKarma:         Karma(yearKarma),
 		EntriesThisWeek:   entriesWeek,
 		EntriesThisYear:   entriesYear,
-		AverageMonthKarma: avgMonthKarma,
+		AverageMonthKarma: Karma(avgMonthKarma),
 		CurrentStreakDays: streak,
 		Last7DaysTrend:    trend,
 		User:              ToUserDTO(user),
