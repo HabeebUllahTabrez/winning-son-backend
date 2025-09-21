@@ -28,9 +28,10 @@ type UserProfileData struct {
 }
 
 type MigratedJournalEntry struct {
-	Topics    string `json:"topics"`
-	Rating    int    `json:"rating"`
-	LocalDate string `json:"local_date"` // YYYY-MM-DD
+	Topics            string `json:"topics"`
+	AlignmentRating   int    `json:"alignment_rating"`
+	ContentmentRating int    `json:"contentment_rating"`
+	LocalDate         string `json:"local_date"` // YYYY-MM-DD
 }
 
 type MigrateRequest struct {
@@ -124,12 +125,13 @@ func (h *MigrateHandler) MigrateData(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(req.Entries) > 0 {
-		stmt, err := tx.Prepare(`INSERT INTO journal_entries (user_id, local_date, topics, rating, updated_at) 
-								 VALUES ($1, $2, $3, $4, NOW())
+		stmt, err := tx.Prepare(`INSERT INTO journal_entries (user_id, local_date, topics, alignment_rating, contentment_rating, updated_at) 
+								 VALUES ($1, $2, $3, $4, $5, NOW())
 								 ON CONFLICT (user_id, local_date) 
 								 DO UPDATE SET 
 								   topics = EXCLUDED.topics, 
-								   rating = EXCLUDED.rating, 
+								   alignment_rating = EXCLUDED.alignment_rating,
+								   contentment_rating = EXCLUDED.contentment_rating,
 								   updated_at = NOW()`)
 		if err != nil {
 			http.Error(w, "could not prepare statement", http.StatusInternalServerError)
@@ -138,7 +140,7 @@ func (h *MigrateHandler) MigrateData(w http.ResponseWriter, r *http.Request) {
 		defer stmt.Close()
 
 		for _, entry := range req.Entries {
-			if entry.Topics == "" || entry.Rating < 1 || entry.Rating > 10 || entry.LocalDate == "" {
+			if entry.Topics == "" || entry.AlignmentRating < 1 || entry.AlignmentRating > 10 || entry.ContentmentRating < 1 || entry.ContentmentRating > 10 || entry.LocalDate == "" {
 				http.Error(w, fmt.Sprintf("invalid entry data: %+v", entry), http.StatusBadRequest)
 				return
 			}
@@ -149,7 +151,7 @@ func (h *MigrateHandler) MigrateData(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			if _, err := stmt.Exec(userID, parsedLocalDate, entry.Topics, entry.Rating); err != nil {
+			if _, err := stmt.Exec(userID, parsedLocalDate, entry.Topics, entry.AlignmentRating, entry.ContentmentRating); err != nil {
 				http.Error(w, "could not save entry", http.StatusInternalServerError)
 				return
 			}
