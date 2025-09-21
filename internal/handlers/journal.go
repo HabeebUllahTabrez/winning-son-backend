@@ -16,16 +16,17 @@ type JournalHandler struct {
 func NewJournalHandler(db *sqlx.DB) *JournalHandler { return &JournalHandler{db: db} }
 
 type journalRequest struct {
-	Topics    string `json:"topics"`
-	Rating    int    `json:"rating"`
-	LocalDate string `json:"local_date"` // YYYY-MM-DD provided by frontend
+	Topics            string `json:"topics"`
+	AlignmentRating   int    `json:"alignment_rating"`
+	ContentmentRating int    `json:"contentment_rating"`
+	LocalDate         string `json:"local_date"` // YYYY-MM-DD provided by frontend
 }
 
 // UpsertEntry creates a new journal entry or updates an existing one for the same user and local date
 func (h *JournalHandler) UpsertEntry(w http.ResponseWriter, r *http.Request) {
 	userID := r.Context().Value("userID").(int)
 	var req journalRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Topics == "" || req.Rating < 1 || req.Rating > 10 || req.LocalDate == "" {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Topics == "" || req.AlignmentRating < 1 || req.AlignmentRating > 10 || req.ContentmentRating < 1 || req.ContentmentRating > 10 || req.LocalDate == "" {
 		http.Error(w, "invalid body", http.StatusBadRequest)
 		return
 	}
@@ -39,14 +40,15 @@ func (h *JournalHandler) UpsertEntry(w http.ResponseWriter, r *http.Request) {
 
 	// Use UPSERT to either insert new entry or update existing one
 	var isUpdate bool
-	err = h.db.QueryRow(`INSERT INTO journal_entries (user_id, local_date, topics, rating, updated_at) 
-	                      VALUES ($1, $2, $3, $4, NOW())
+	err = h.db.QueryRow(`INSERT INTO journal_entries (user_id, local_date, topics, alignment_rating, contentment_rating, updated_at) 
+	                      VALUES ($1, $2, $3, $4, $5, NOW())
 	                      ON CONFLICT (user_id, local_date) 
 	                      DO UPDATE SET 
 	                        topics = EXCLUDED.topics, 
-	                        rating = EXCLUDED.rating, 
+	                        alignment_rating = EXCLUDED.alignment_rating, 
+							contentment_rating = EXCLUDED.contentment_rating,
 	                        updated_at = NOW()
-	                      RETURNING (xmax = 0)`, userID, parsedLocalDate, req.Topics, req.Rating).Scan(&isUpdate)
+	                      RETURNING (xmax = 0)`, userID, parsedLocalDate, req.Topics, req.AlignmentRating, req.ContentmentRating).Scan(&isUpdate)
 	if err != nil {
 		http.Error(w, "could not save", http.StatusInternalServerError)
 		return
@@ -64,9 +66,10 @@ func (h *JournalHandler) UpsertEntry(w http.ResponseWriter, r *http.Request) {
 }
 
 type journalEntry struct {
-	LocalDate string `json:"local_date"`
-	Topics    string `json:"topics"`
-	Rating    int    `json:"rating"`
+	LocalDate         string `json:"local_date"`
+	Topics            string `json:"topics"`
+	AlignmentRating   int    `json:"alignment_rating"`
+	ContentmentRating int    `json:"contentment_rating"`
 }
 
 // Delete removes a journal entry for the authenticated user by local_date (YYYY-MM-DD)
@@ -133,7 +136,7 @@ func (h *JournalHandler) List(w http.ResponseWriter, r *http.Request) {
 		where += fmt.Sprintf(" AND local_date <= $%d", len(args))
 	}
 
-	query := "SELECT local_date, topics, rating FROM journal_entries " + where + " ORDER BY local_date DESC LIMIT 100"
+	query := "SELECT local_date, topics, alignment_rating, contentment_rating FROM journal_entries " + where + " ORDER BY local_date DESC LIMIT 100"
 	rows, err := h.db.Queryx(query, args...)
 	if err != nil {
 		http.Error(w, "could not fetch", http.StatusInternalServerError)
@@ -144,9 +147,10 @@ func (h *JournalHandler) List(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var d time.Time
 		var t string
-		var r8 int
-		if err := rows.Scan(&d, &t, &r8); err == nil {
-			out = append(out, journalEntry{LocalDate: d.Format("2006-01-02"), Topics: t, Rating: r8})
+		var ar int
+		var cr int
+		if err := rows.Scan(&d, &t, &ar, &cr); err == nil {
+			out = append(out, journalEntry{LocalDate: d.Format("2006-01-02"), Topics: t, AlignmentRating: ar, ContentmentRating: cr})
 		}
 	}
 	w.Header().Set("Content-Type", "application/json")
