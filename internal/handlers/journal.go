@@ -38,17 +38,21 @@ func (h *JournalHandler) UpsertEntry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Calculate Karma
+	karma := (float64(req.AlignmentRating) + float64(req.ContentmentRating) - 2) / 18.0
+
 	// Use UPSERT to either insert new entry or update existing one
 	var isUpdate bool
-	err = h.db.QueryRow(`INSERT INTO journal_entries (user_id, local_date, topics, alignment_rating, contentment_rating, updated_at) 
-	                      VALUES ($1, $2, $3, $4, $5, NOW())
+	err = h.db.QueryRow(`INSERT INTO journal_entries (user_id, local_date, topics, alignment_rating, contentment_rating, karma, updated_at) 
+	                      VALUES ($1, $2, $3, $4, $5, $6, NOW())
 	                      ON CONFLICT (user_id, local_date) 
 	                      DO UPDATE SET 
 	                        topics = EXCLUDED.topics, 
 	                        alignment_rating = EXCLUDED.alignment_rating, 
 							contentment_rating = EXCLUDED.contentment_rating,
+							karma = EXCLUDED.karma,
 	                        updated_at = NOW()
-	                      RETURNING (xmax = 0)`, userID, parsedLocalDate, req.Topics, req.AlignmentRating, req.ContentmentRating).Scan(&isUpdate)
+	                      RETURNING (xmax = 0)`, userID, parsedLocalDate, req.Topics, req.AlignmentRating, req.ContentmentRating, karma).Scan(&isUpdate)
 	if err != nil {
 		http.Error(w, "could not save", http.StatusInternalServerError)
 		return
@@ -66,10 +70,11 @@ func (h *JournalHandler) UpsertEntry(w http.ResponseWriter, r *http.Request) {
 }
 
 type journalEntry struct {
-	LocalDate         string `json:"local_date"`
-	Topics            string `json:"topics"`
-	AlignmentRating   int    `json:"alignment_rating"`
-	ContentmentRating int    `json:"contentment_rating"`
+	LocalDate         string  `json:"local_date"`
+	Topics            string  `json:"topics"`
+	AlignmentRating   int     `json:"alignment_rating"`
+	ContentmentRating int     `json:"contentment_rating"`
+	Karma             float64 `json:"karma"`
 }
 
 // Delete removes a journal entry for the authenticated user by local_date (YYYY-MM-DD)
