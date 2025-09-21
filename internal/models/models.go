@@ -15,3 +15,15 @@ type User struct {
 	EndDate      *time.Time `db:"end_date" json:"end_date,omitempty"`
 	IsAdmin      bool       `db:"is_admin" json:"is_admin"`
 }
+
+type Journal struct {
+	ID                int       `db:"id" json:"id"`
+	UserID            int       `db:"user_id" json:"user_id"`
+	LocalDate         string    `db:"local_date" json:"local_date"`
+	Topics            string    `db:"topics" json:"topics"`
+	AlignmentRating   int       `db:"alignment_rating" json:"alignment_rating"`
+	ContentmentRating int       `db:"contentment_rating" json:"contentment_rating"`
+	Karma             float64   `db:"karma" json:"karma"`
+	CreatedAt         time.Time `db:"created_at" json:"created_at"`
+	UpdatedAt         time.Time `db:"updated_at" json:"updated_at"`
+}
