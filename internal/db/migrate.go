@@ -21,7 +21,9 @@ CREATE TABLE IF NOT EXISTS journal_entries (
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     local_date DATE NOT NULL DEFAULT CURRENT_DATE,
     topics TEXT NOT NULL,
-    rating INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 10),
+    alignment_rating INTEGER NOT NULL CHECK (alignment_rating BETWEEN 1 AND 10),
+    contentment_rating INTEGER NOT NULL CHECK (contentment_rating BETWEEN 1 AND 10),
+    karma REAL NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE(user_id, local_date)
@@ -33,6 +35,25 @@ CREATE TABLE IF NOT EXISTS journal_entries (
 	}
 
 	alters := `
+DO $$ BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns WHERE table_name='journal_entries' AND column_name='rating'
+    ) THEN
+        ALTER TABLE journal_entries ADD COLUMN IF NOT EXISTS alignment_rating INTEGER NOT NULL DEFAULT 1;
+        ALTER TABLE journal_entries ADD COLUMN IF NOT EXISTS contentment_rating INTEGER NOT NULL DEFAULT 1;
+
+        UPDATE journal_entries SET alignment_rating = rating;
+        UPDATE journal_entries SET contentment_rating = rating;
+
+        ALTER TABLE journal_entries DROP COLUMN rating;
+
+        ALTER TABLE journal_entries ALTER COLUMN alignment_rating DROP DEFAULT;
+        ALTER TABLE journal_entries ALTER COLUMN contentment_rating DROP DEFAULT;
+        
+        ALTER TABLE journal_entries ADD CONSTRAINT alignment_rating_check CHECK (alignment_rating BETWEEN 1 AND 10);
+        ALTER TABLE journal_entries ADD CONSTRAINT contentment_rating_check CHECK (contentment_rating BETWEEN 1 AND 10);
+    END IF;
+END $$;
 DO $$ BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='first_name'
@@ -71,6 +92,17 @@ DO $$ BEGIN
         SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='is_admin'
     ) THEN
         ALTER TABLE users ADD COLUMN is_admin BOOLEAN NOT NULL DEFAULT false;
+    END IF;
+END $$;
+DO $$ BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns WHERE table_name='journal_entries' AND column_name='karma'
+    ) THEN
+        ALTER TABLE journal_entries ADD COLUMN karma REAL NOT NULL DEFAULT 0;
+        
+        -- Backfill karma for existing entries
+        UPDATE journal_entries
+        SET karma = (alignment_rating + contentment_rating - 2) / 18.0;
     END IF;
 END $$;`
 	_, err = db.ExecContext(context.Background(), alters)

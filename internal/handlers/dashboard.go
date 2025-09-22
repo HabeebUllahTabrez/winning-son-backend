@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -9,6 +10,13 @@ import (
 
 	"github.com/jmoiron/sqlx"
 )
+
+// Karma is a custom type to handle rounding to 2 decimal places in JSON
+type Karma float64
+
+func (k Karma) MarshalJSON() ([]byte, error) {
+	return []byte(fmt.Sprintf("%.2f", float64(k))), nil
+}
 
 type DashboardHandler struct {
 	db *sqlx.DB
@@ -18,22 +26,22 @@ func NewDashboardHandler(db *sqlx.DB) *DashboardHandler { return &DashboardHandl
 
 type trendPoint struct {
 	LocalDate string `json:"local_date"`
-	Points    int    `json:"points"`
+	Karma     Karma  `json:"karma"`
 }
 
 type dashboardResponse struct {
-	ReferenceDate      string       `json:"reference_date"`
-	HasTodayEntry      bool         `json:"has_today_entry"`
-	DayPoints          int          `json:"day_points"`
-	WeekPoints         int          `json:"week_points"`
-	MonthPoints        int          `json:"month_points"`
-	YearPoints         int          `json:"year_points"`
-	EntriesThisWeek    int          `json:"entries_this_week"`
-	EntriesThisYear    int          `json:"entries_this_year"`
-	AverageMonthRating float64      `json:"average_month_rating"`
-	CurrentStreakDays  int          `json:"current_streak_days"`
-	Last7DaysTrend     []trendPoint `json:"last7_days_trend"`
-	User               UserDTO      `json:"user"`
+	ReferenceDate     string       `json:"reference_date"`
+	HasTodayEntry     bool         `json:"has_today_entry"`
+	DayKarma          Karma        `json:"day_karma"`
+	WeekKarma         Karma        `json:"week_karma"`
+	MonthKarma        Karma        `json:"month_karma"`
+	YearKarma         Karma        `json:"year_karma"`
+	EntriesThisWeek   int          `json:"entries_this_week"`
+	EntriesThisYear   int          `json:"entries_this_year"`
+	AverageMonthKarma Karma        `json:"average_month_karma"`
+	CurrentStreakDays int          `json:"current_streak_days"`
+	Last7DaysTrend    []trendPoint `json:"last7_days_trend"`
+	User              UserDTO      `json:"user"`
 }
 
 // Get aggregates and useful metrics to power the dashboard.
@@ -66,23 +74,23 @@ func (h *DashboardHandler) Get(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 1) Aggregate points and counts in a single query using FILTER
+	// 1) Aggregate karma and counts in a single query using FILTER
 	aggQuery := `
 		SELECT
-			COALESCE(SUM(rating) FILTER (WHERE local_date = $2), 0) AS day_points,
-			COALESCE(SUM(rating) FILTER (WHERE local_date >= date_trunc('week', $2::timestamp)::date AND local_date <= $2), 0) AS week_points,
-			COALESCE(SUM(rating) FILTER (WHERE date_trunc('month', local_date) = date_trunc('month', $2::date)), 0) AS month_points,
-			COALESCE(SUM(rating) FILTER (WHERE date_trunc('year', local_date) = date_trunc('year', $2::date)), 0) AS year_points,
+			COALESCE(SUM(karma) FILTER (WHERE local_date = $2), 0) AS day_karma,
+			COALESCE(SUM(karma) FILTER (WHERE local_date >= date_trunc('week', $2::timestamp)::date AND local_date <= $2), 0) AS week_karma,
+			COALESCE(SUM(karma) FILTER (WHERE date_trunc('month', local_date) = date_trunc('month', $2::date)), 0) AS month_karma,
+			COALESCE(SUM(karma) FILTER (WHERE date_trunc('year', local_date) = date_trunc('year', $2::date)), 0) AS year_karma,
 			COALESCE(COUNT(*) FILTER (WHERE local_date >= date_trunc('week', $2::timestamp)::date AND local_date <= $2), 0) AS entries_this_week,
 			COALESCE(COUNT(*) FILTER (WHERE date_trunc('year', local_date) = date_trunc('year', $2::date)), 0) AS entries_this_year,
-			COALESCE(AVG(rating) FILTER (WHERE date_trunc('month', local_date) = date_trunc('month', $2::date)), 0) AS avg_month_rating
+			COALESCE(AVG(karma) FILTER (WHERE date_trunc('month', local_date) = date_trunc('month', $2::date)), 0) AS avg_month_karma
 		FROM journal_entries
 		WHERE user_id = $1`
 
-	var dayPts, weekPts, monthPts, yearPts int
+	var dayKarma, weekKarma, monthKarma, yearKarma float64
 	var entriesWeek, entriesYear int
-	var avgMonth float64
-	if err := h.db.QueryRowx(aggQuery, userID, refDate).Scan(&dayPts, &weekPts, &monthPts, &yearPts, &entriesWeek, &entriesYear, &avgMonth); err != nil {
+	var avgMonthKarma float64
+	if err := h.db.QueryRowx(aggQuery, userID, refDate).Scan(&dayKarma, &weekKarma, &monthKarma, &yearKarma, &entriesWeek, &entriesYear, &avgMonthKarma); err != nil {
 		http.Error(w, "could not fetch aggregates", http.StatusInternalServerError)
 		return
 	}
@@ -112,7 +120,7 @@ func (h *DashboardHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	// 4) Last 7 days trend ending at reference date (inclusive)
 	trendRows, err := h.db.Queryx(`
-		SELECT d::date AS local_date, COALESCE(e.rating, 0) AS points
+		SELECT d::date AS local_date, COALESCE(e.karma, 0) AS karma
 		FROM generate_series($2::date - INTERVAL '6 days', $2::date, INTERVAL '1 day') AS d
 		LEFT JOIN journal_entries e ON e.user_id=$1 AND e.local_date = d::date
 		ORDER BY d`, userID, refDate)
@@ -124,25 +132,25 @@ func (h *DashboardHandler) Get(w http.ResponseWriter, r *http.Request) {
 	var trend []trendPoint
 	for trendRows.Next() {
 		var d time.Time
-		var p int
+		var p float64
 		if err := trendRows.Scan(&d, &p); err == nil {
-			trend = append(trend, trendPoint{LocalDate: d.Format("2006-01-02"), Points: p})
+			trend = append(trend, trendPoint{LocalDate: d.Format("2006-01-02"), Karma: Karma(p)})
 		}
 	}
 
 	resp := dashboardResponse{
-		ReferenceDate:      refDate.Format("2006-01-02"),
-		HasTodayEntry:      hasToday,
-		DayPoints:          dayPts,
-		WeekPoints:         weekPts,
-		MonthPoints:        monthPts,
-		YearPoints:         yearPts,
-		EntriesThisWeek:    entriesWeek,
-		EntriesThisYear:    entriesYear,
-		AverageMonthRating: avgMonth,
-		CurrentStreakDays:  streak,
-		Last7DaysTrend:     trend,
-		User:               ToUserDTO(user),
+		ReferenceDate:     refDate.Format("2006-01-02"),
+		HasTodayEntry:     hasToday,
+		DayKarma:          Karma(dayKarma),
+		WeekKarma:         Karma(weekKarma),
+		MonthKarma:        Karma(monthKarma),
+		YearKarma:         Karma(yearKarma),
+		EntriesThisWeek:   entriesWeek,
+		EntriesThisYear:   entriesYear,
+		AverageMonthKarma: Karma(avgMonthKarma),
+		CurrentStreakDays: streak,
+		Last7DaysTrend:    trend,
+		User:              ToUserDTO(user),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
