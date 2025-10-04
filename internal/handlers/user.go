@@ -7,22 +7,31 @@ import (
 	"time"
 
 	"winsonin/internal/models"
+	"winsonin/internal/services"
 
 	"github.com/jmoiron/sqlx"
 )
 
 type UserHandler struct {
-	db *sqlx.DB
+	db     *sqlx.DB
+	encSvc *services.EncryptionService
 }
 
-func NewUserHandler(db *sqlx.DB) *UserHandler { return &UserHandler{db: db} }
+func NewUserHandler(db *sqlx.DB, encSvc *services.EncryptionService) *UserHandler {
+	return &UserHandler{db: db, encSvc: encSvc}
+}
 
 // GetMe returns the current user's profile
 func (h *UserHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 	userID := r.Context().Value("userID").(int)
 	var u models.User
-	if err := h.db.Get(&u, `SELECT id, email, password_hash, created_at, first_name, last_name, avatar_id, goal, start_date, end_date, is_admin FROM users WHERE id=$1`, userID); err != nil {
+	if err := h.db.Get(&u, `SELECT id, email, email_blind_index, password_hash, created_at, first_name, last_name, avatar_id, goal, start_date, end_date, is_admin FROM users WHERE id=$1`, userID); err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	// Decrypt sensitive fields
+	if err := h.encSvc.DecryptUser(&u); err != nil {
+		http.Error(w, "could not decrypt user data", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -66,8 +75,14 @@ func (h *UserHandler) UpdateMe(w http.ResponseWriter, r *http.Request) {
 		argIdx++
 	}
 	if body.Goal != nil {
+		// Encrypt goal before storing
+		tempUser := models.User{Goal: body.Goal}
+		if err := h.encSvc.EncryptUser(&tempUser); err != nil {
+			http.Error(w, "could not encrypt goal", http.StatusInternalServerError)
+			return
+		}
 		setClauses = append(setClauses, "goal=$"+itoa(argIdx))
-		args = append(args, *body.Goal)
+		args = append(args, tempUser.Goal)
 		argIdx++
 	}
 	if body.StartDate != nil {

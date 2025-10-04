@@ -6,14 +6,20 @@ import (
 	"net/http"
 	"time"
 
+	"winsonin/internal/models"
+	"winsonin/internal/services"
+
 	"github.com/jmoiron/sqlx"
 )
 
 type JournalHandler struct {
-	db *sqlx.DB
+	db     *sqlx.DB
+	encSvc *services.EncryptionService
 }
 
-func NewJournalHandler(db *sqlx.DB) *JournalHandler { return &JournalHandler{db: db} }
+func NewJournalHandler(db *sqlx.DB, encSvc *services.EncryptionService) *JournalHandler {
+	return &JournalHandler{db: db, encSvc: encSvc}
+}
 
 type journalRequest struct {
 	Topics            string `json:"topics"`
@@ -41,18 +47,25 @@ func (h *JournalHandler) UpsertEntry(w http.ResponseWriter, r *http.Request) {
 	// Calculate Karma
 	karma := (float64(req.AlignmentRating) + float64(req.ContentmentRating) - 2) / 18.0
 
+	// Encrypt topics before storing
+	tempJournal := models.Journal{Topics: req.Topics}
+	if err := h.encSvc.EncryptJournal(&tempJournal); err != nil {
+		http.Error(w, "could not encrypt topics", http.StatusInternalServerError)
+		return
+	}
+
 	// Use UPSERT to either insert new entry or update existing one
 	var isUpdate bool
-	err = h.db.QueryRow(`INSERT INTO journal_entries (user_id, local_date, topics, alignment_rating, contentment_rating, karma, updated_at) 
+	err = h.db.QueryRow(`INSERT INTO journal_entries (user_id, local_date, topics, alignment_rating, contentment_rating, karma, updated_at)
 	                      VALUES ($1, $2, $3, $4, $5, $6, NOW())
-	                      ON CONFLICT (user_id, local_date) 
-	                      DO UPDATE SET 
-	                        topics = EXCLUDED.topics, 
-	                        alignment_rating = EXCLUDED.alignment_rating, 
+	                      ON CONFLICT (user_id, local_date)
+	                      DO UPDATE SET
+	                        topics = EXCLUDED.topics,
+	                        alignment_rating = EXCLUDED.alignment_rating,
 							contentment_rating = EXCLUDED.contentment_rating,
 							karma = EXCLUDED.karma,
 	                        updated_at = NOW()
-	                      RETURNING (xmax = 0)`, userID, parsedLocalDate, req.Topics, req.AlignmentRating, req.ContentmentRating, karma).Scan(&isUpdate)
+	                      RETURNING (xmax = 0)`, userID, parsedLocalDate, tempJournal.Topics, req.AlignmentRating, req.ContentmentRating, karma).Scan(&isUpdate)
 	if err != nil {
 		http.Error(w, "could not save", http.StatusInternalServerError)
 		return
@@ -141,7 +154,7 @@ func (h *JournalHandler) List(w http.ResponseWriter, r *http.Request) {
 		where += fmt.Sprintf(" AND local_date <= $%d", len(args))
 	}
 
-	query := "SELECT local_date, topics, alignment_rating, contentment_rating FROM journal_entries " + where + " ORDER BY local_date DESC LIMIT 100"
+	query := "SELECT local_date, topics, alignment_rating, contentment_rating, karma FROM journal_entries " + where + " ORDER BY local_date DESC LIMIT 100"
 	rows, err := h.db.Queryx(query, args...)
 	if err != nil {
 		http.Error(w, "could not fetch", http.StatusInternalServerError)
@@ -154,8 +167,19 @@ func (h *JournalHandler) List(w http.ResponseWriter, r *http.Request) {
 		var t string
 		var ar int
 		var cr int
-		if err := rows.Scan(&d, &t, &ar, &cr); err == nil {
-			out = append(out, journalEntry{LocalDate: d.Format("2006-01-02"), Topics: t, AlignmentRating: ar, ContentmentRating: cr})
+		var k float64
+		if err := rows.Scan(&d, &t, &ar, &cr, &k); err == nil {
+			// Decrypt topics
+			tempJournal := models.Journal{Topics: t}
+			if err := h.encSvc.DecryptJournal(&tempJournal); err == nil {
+				out = append(out, journalEntry{
+					LocalDate:         d.Format("2006-01-02"),
+					Topics:            tempJournal.Topics,
+					AlignmentRating:   ar,
+					ContentmentRating: cr,
+					Karma:             k,
+				})
+			}
 		}
 	}
 	w.Header().Set("Content-Type", "application/json")

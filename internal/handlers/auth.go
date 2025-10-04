@@ -12,15 +12,17 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"winsonin/internal/models"
+	"winsonin/internal/services"
 )
 
 type AuthHandler struct {
 	db        *sqlx.DB
 	jwtSecret []byte
+	encSvc    *services.EncryptionService
 }
 
-func NewAuthHandler(db *sqlx.DB, jwtSecret []byte) *AuthHandler {
-	return &AuthHandler{db: db, jwtSecret: jwtSecret}
+func NewAuthHandler(db *sqlx.DB, jwtSecret []byte, encSvc *services.EncryptionService) *AuthHandler {
+	return &AuthHandler{db: db, jwtSecret: jwtSecret, encSvc: encSvc}
 }
 
 type credentials struct {
@@ -46,10 +48,25 @@ func (h *AuthHandler) Signup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Create a temporary user to encrypt
+	tempUser := models.User{Email: c.Email}
+	if err := h.encSvc.EncryptUser(&tempUser); err != nil {
+		http.Error(w, "could not encrypt email", http.StatusInternalServerError)
+		return
+	}
+	encryptedEmail := tempUser.Email
+	emailBlindIndex := tempUser.EmailBlindIndex
+
 	var user models.User
-	err = h.db.QueryRowx(`INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email, password_hash, created_at, first_name, last_name, avatar_id, goal, start_date, end_date, is_admin`, c.Email, string(hashed)).StructScan(&user)
+	err = h.db.QueryRowx(`INSERT INTO users (email, email_blind_index, password_hash) VALUES ($1, $2, $3) RETURNING id, email, email_blind_index, password_hash, created_at, first_name, last_name, avatar_id, goal, start_date, end_date, is_admin`, encryptedEmail, emailBlindIndex, string(hashed)).StructScan(&user)
 	if err != nil {
 		http.Error(w, "could not create user", http.StatusBadRequest)
+		return
+	}
+
+	// Decrypt user data for response
+	if err := h.encSvc.DecryptUser(&user); err != nil {
+		http.Error(w, "could not decrypt user data", http.StatusInternalServerError)
 		return
 	}
 
@@ -74,14 +91,23 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Generate blind index for email lookup
+	emailBlindIndex := h.encSvc.GenerateEmailBlindIndex(c.Email)
+
 	var user models.User
-	err := h.db.Get(&user, `SELECT id, email, password_hash, created_at, first_name, last_name, avatar_id, goal, start_date, end_date, is_admin FROM users WHERE email=$1`, c.Email)
+	err := h.db.Get(&user, `SELECT id, email, email_blind_index, password_hash, created_at, first_name, last_name, avatar_id, goal, start_date, end_date, is_admin FROM users WHERE email_blind_index=$1`, emailBlindIndex)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			http.Error(w, "invalid credentials", http.StatusUnauthorized)
 			return
 		}
 		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Decrypt user data
+	if err := h.encSvc.DecryptUser(&user); err != nil {
+		http.Error(w, "could not decrypt user data", http.StatusInternalServerError)
 		return
 	}
 	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(c.Password)) != nil {

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"winsonin/internal/models"
+	"winsonin/internal/services"
 
 	"github.com/jmoiron/sqlx"
 )
@@ -19,10 +20,13 @@ func (k Karma) MarshalJSON() ([]byte, error) {
 }
 
 type DashboardHandler struct {
-	db *sqlx.DB
+	db     *sqlx.DB
+	encSvc *services.EncryptionService
 }
 
-func NewDashboardHandler(db *sqlx.DB) *DashboardHandler { return &DashboardHandler{db: db} }
+func NewDashboardHandler(db *sqlx.DB, encSvc *services.EncryptionService) *DashboardHandler {
+	return &DashboardHandler{db: db, encSvc: encSvc}
+}
 
 type trendPoint struct {
 	LocalDate string `json:"local_date"`
@@ -51,8 +55,14 @@ func (h *DashboardHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	// Fetch basic user profile to include in dashboard
 	var user models.User
-	if err := h.db.Get(&user, `SELECT id, email, password_hash, created_at, first_name, last_name, avatar_id, goal, start_date, end_date, is_admin FROM users WHERE id=$1`, userID); err != nil {
+	if err := h.db.Get(&user, `SELECT id, email, email_blind_index, password_hash, created_at, first_name, last_name, avatar_id, goal, start_date, end_date, is_admin FROM users WHERE id=$1`, userID); err != nil {
 		http.Error(w, "could not fetch user", http.StatusInternalServerError)
+		return
+	}
+
+	// Decrypt sensitive user fields
+	if err := h.encSvc.DecryptUser(&user); err != nil {
+		http.Error(w, "could not decrypt user data", http.StatusInternalServerError)
 		return
 	}
 
