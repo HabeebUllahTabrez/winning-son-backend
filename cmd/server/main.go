@@ -152,6 +152,7 @@ func main() {
 			pr.Delete("/journal", journalHandler.Delete)
 			pr.Get("/journal", journalHandler.List)
 			pr.Get("/dashboard", dashboardHandler.Get)
+			pr.Get("/dashboard/submission-history", dashboardHandler.GetSubmissionHistory)
 			pr.Get("/me", userHandler.GetMe)
 			pr.Put("/me", userHandler.UpdateMe)
 			pr.Get("/admin/overview", adminHandler.Overview)
