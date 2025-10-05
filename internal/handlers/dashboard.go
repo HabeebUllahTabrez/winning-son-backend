@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"winsonin/internal/models"
+	"winsonin/internal/services"
 
 	"github.com/jmoiron/sqlx"
 )
@@ -19,10 +20,13 @@ func (k Karma) MarshalJSON() ([]byte, error) {
 }
 
 type DashboardHandler struct {
-	db *sqlx.DB
+	db     *sqlx.DB
+	encSvc *services.EncryptionService
 }
 
-func NewDashboardHandler(db *sqlx.DB) *DashboardHandler { return &DashboardHandler{db: db} }
+func NewDashboardHandler(db *sqlx.DB, encSvc *services.EncryptionService) *DashboardHandler {
+	return &DashboardHandler{db: db, encSvc: encSvc}
+}
 
 type trendPoint struct {
 	LocalDate string `json:"local_date"`
@@ -44,6 +48,17 @@ type dashboardResponse struct {
 	User              UserDTO      `json:"user"`
 }
 
+type submissionHistoryPoint struct {
+	LocalDate     string `json:"local_date"`
+	HasSubmission bool   `json:"has_submission"`
+}
+
+type submissionHistoryResponse struct {
+	StartDate string                   `json:"start_date"`
+	EndDate   string                   `json:"end_date"`
+	History   []submissionHistoryPoint `json:"history"`
+}
+
 // Get aggregates and useful metrics to power the dashboard.
 // Accepts optional query param: local_date=YYYY-MM-DD to use as the user's "today".
 func (h *DashboardHandler) Get(w http.ResponseWriter, r *http.Request) {
@@ -51,8 +66,14 @@ func (h *DashboardHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	// Fetch basic user profile to include in dashboard
 	var user models.User
-	if err := h.db.Get(&user, `SELECT id, email, password_hash, created_at, first_name, last_name, avatar_id, goal, start_date, end_date, is_admin FROM users WHERE id=$1`, userID); err != nil {
+	if err := h.db.Get(&user, `SELECT id, email, email_blind_index, password_hash, created_at, first_name, last_name, avatar_id, goal, start_date, end_date, is_admin FROM users WHERE id=$1`, userID); err != nil {
 		http.Error(w, "could not fetch user", http.StatusInternalServerError)
+		return
+	}
+
+	// Decrypt sensitive user fields
+	if err := h.encSvc.DecryptUser(&user); err != nil {
+		http.Error(w, "could not decrypt user data", http.StatusInternalServerError)
 		return
 	}
 
@@ -151,6 +172,85 @@ func (h *DashboardHandler) Get(w http.ResponseWriter, r *http.Request) {
 		CurrentStreakDays: streak,
 		Last7DaysTrend:    trend,
 		User:              ToUserDTO(user),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+// GetSubmissionHistory returns whether the user has submissions for each day in a date range.
+// Accepts query params: start_date=YYYY-MM-DD, end_date=YYYY-MM-DD (required).
+// The date range is limited to a maximum of 365 days.
+func (h *DashboardHandler) GetSubmissionHistory(w http.ResponseWriter, r *http.Request) {
+	userID := r.Context().Value("userID").(int)
+
+	// Parse and validate start_date
+	startDateStr := r.URL.Query().Get("start_date")
+	if startDateStr == "" {
+		http.Error(w, "start_date is required (format: YYYY-MM-DD)", http.StatusBadRequest)
+		return
+	}
+	startDate, err := time.Parse("2006-01-02", startDateStr)
+	if err != nil {
+		http.Error(w, "invalid start_date format; expected YYYY-MM-DD", http.StatusBadRequest)
+		return
+	}
+
+	// Parse and validate end_date
+	endDateStr := r.URL.Query().Get("end_date")
+	if endDateStr == "" {
+		http.Error(w, "end_date is required (format: YYYY-MM-DD)", http.StatusBadRequest)
+		return
+	}
+	endDate, err := time.Parse("2006-01-02", endDateStr)
+	if err != nil {
+		http.Error(w, "invalid end_date format; expected YYYY-MM-DD", http.StatusBadRequest)
+		return
+	}
+
+	// Validate date range
+	if endDate.Before(startDate) {
+		http.Error(w, "end_date must be on or after start_date", http.StatusBadRequest)
+		return
+	}
+
+	// Limit to 365 days
+	daysDiff := endDate.Sub(startDate).Hours() / 24
+	if daysDiff > 365 {
+		http.Error(w, "date range cannot exceed 365 days", http.StatusBadRequest)
+		return
+	}
+
+	// Query to get submission history
+	query := `
+		SELECT d::date AS local_date,
+		       EXISTS (SELECT 1 FROM journal_entries WHERE user_id=$1 AND local_date=d::date) AS has_submission
+		FROM generate_series($2::date, $3::date, INTERVAL '1 day') AS d
+		ORDER BY d`
+
+	rows, err := h.db.Queryx(query, userID, startDate, endDate)
+	if err != nil {
+		http.Error(w, "could not fetch submission history", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var history []submissionHistoryPoint
+	for rows.Next() {
+		var d time.Time
+		var hasSubmission bool
+		if err := rows.Scan(&d, &hasSubmission); err == nil {
+			history = append(history, submissionHistoryPoint{
+				LocalDate:     d.Format("2006-01-02"),
+				HasSubmission: hasSubmission,
+			})
+		}
+	}
+
+	resp := submissionHistoryResponse{
+		StartDate: startDate.Format("2006-01-02"),
+		EndDate:   endDate.Format("2006-01-02"),
+		History:   history,
 	}
 
 	w.Header().Set("Content-Type", "application/json")

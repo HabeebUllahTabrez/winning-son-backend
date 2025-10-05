@@ -21,6 +21,7 @@ import (
 	"winsonin/internal/db"
 	"winsonin/internal/handlers"
 	mw "winsonin/internal/middleware"
+	"winsonin/internal/services"
 )
 
 func mustGetenv(key, fallback string) string {
@@ -57,6 +58,22 @@ func main() {
 		logger.Fatal("JWT_SECRET is required")
 	}
 
+	encryptionKey := os.Getenv("ENCRYPTION_KEY")
+	if encryptionKey == "" {
+		logger.Fatal("ENCRYPTION_KEY is required (must be 32 bytes)")
+	}
+	if len(encryptionKey) != 32 {
+		logger.Fatal("ENCRYPTION_KEY must be exactly 32 bytes")
+	}
+
+	blindIndexKey := os.Getenv("BLIND_INDEX_KEY")
+	if blindIndexKey == "" {
+		logger.Fatal("BLIND_INDEX_KEY is required (must be 32 bytes)")
+	}
+	if len(blindIndexKey) != 32 {
+		logger.Fatal("BLIND_INDEX_KEY must be exactly 32 bytes")
+	}
+
 	port := mustGetenv("PORT", "8080")
 
 	var dbConn *sqlx.DB
@@ -74,6 +91,12 @@ func main() {
 		if err := db.RunMigrations(dbConn); err != nil {
 			logger.Fatal("failed migrations", zap.Error(err))
 		}
+	}
+
+	// Initialize encryption service
+	encSvc, err := services.NewEncryptionService([]byte(encryptionKey), []byte(blindIndexKey))
+	if err != nil {
+		logger.Fatal("failed to initialize encryption service", zap.Error(err))
 	}
 
 	r := chi.NewRouter()
@@ -111,12 +134,12 @@ func main() {
 	// 	http.Error(w, "internal server error", http.StatusInternalServerError)
 	// })
 
-	authHandler := handlers.NewAuthHandler(dbConn, []byte(jwtSecret))
-	journalHandler := handlers.NewJournalHandler(dbConn)
-	dashboardHandler := handlers.NewDashboardHandler(dbConn)
-	userHandler := handlers.NewUserHandler(dbConn)
+	authHandler := handlers.NewAuthHandler(dbConn, []byte(jwtSecret), encSvc)
+	journalHandler := handlers.NewJournalHandler(dbConn, encSvc)
+	dashboardHandler := handlers.NewDashboardHandler(dbConn, encSvc)
+	userHandler := handlers.NewUserHandler(dbConn, encSvc)
 	adminHandler := handlers.NewAdminHandler(dbConn)
-	migrateHandler := handlers.NewMigrateHandler(dbConn)
+	migrateHandler := handlers.NewMigrateHandler(dbConn, encSvc)
 	authMW := mw.NewAuthMiddleware([]byte(jwtSecret))
 
 	routeAPI := func(api chi.Router) {
@@ -129,6 +152,7 @@ func main() {
 			pr.Delete("/journal", journalHandler.Delete)
 			pr.Get("/journal", journalHandler.List)
 			pr.Get("/dashboard", dashboardHandler.Get)
+			pr.Get("/dashboard/submission-history", dashboardHandler.GetSubmissionHistory)
 			pr.Get("/me", userHandler.GetMe)
 			pr.Put("/me", userHandler.UpdateMe)
 			pr.Get("/admin/overview", adminHandler.Overview)

@@ -10,7 +10,8 @@ func RunMigrations(db *sqlx.DB) error {
 	schema := `
 CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
-    email TEXT UNIQUE NOT NULL,
+    email TEXT NOT NULL,
+    email_blind_index TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -49,7 +50,7 @@ DO $$ BEGIN
 
         ALTER TABLE journal_entries ALTER COLUMN alignment_rating DROP DEFAULT;
         ALTER TABLE journal_entries ALTER COLUMN contentment_rating DROP DEFAULT;
-        
+
         ALTER TABLE journal_entries ADD CONSTRAINT alignment_rating_check CHECK (alignment_rating BETWEEN 1 AND 10);
         ALTER TABLE journal_entries ADD CONSTRAINT contentment_rating_check CHECK (contentment_rating BETWEEN 1 AND 10);
     END IF;
@@ -93,13 +94,20 @@ DO $$ BEGIN
     ) THEN
         ALTER TABLE users ADD COLUMN is_admin BOOLEAN NOT NULL DEFAULT false;
     END IF;
+    -- Add email_blind_index column for existing users table
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='email_blind_index'
+    ) THEN
+        ALTER TABLE users ADD COLUMN email_blind_index TEXT;
+        -- Note: After adding this column, you'll need to run a data migration to populate blind indexes
+    END IF;
 END $$;
 DO $$ BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM information_schema.columns WHERE table_name='journal_entries' AND column_name='karma'
     ) THEN
         ALTER TABLE journal_entries ADD COLUMN karma REAL NOT NULL DEFAULT 0;
-        
+
         -- Backfill karma for existing entries
         UPDATE journal_entries
         SET karma = (alignment_rating + contentment_rating - 2) / 18.0;
