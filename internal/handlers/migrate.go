@@ -87,8 +87,18 @@ func (h *MigrateHandler) MigrateData(w http.ResponseWriter, r *http.Request) {
 			argIdx++
 		}
 		if req.Profile.Goal != nil {
+			// Encrypt goal before storing
+			encryptedGoal := *req.Profile.Goal
+			if encryptedGoal != "" {
+				tempUser := models.User{Goal: &encryptedGoal}
+				if err := h.encSvc.EncryptUser(&tempUser); err != nil {
+					http.Error(w, "could not encrypt goal", http.StatusInternalServerError)
+					return
+				}
+				encryptedGoal = *tempUser.Goal
+			}
 			setClauses = append(setClauses, fmt.Sprintf("goal=$%d", argIdx))
-			args = append(args, *req.Profile.Goal)
+			args = append(args, encryptedGoal)
 			argIdx++
 		}
 		if req.Profile.StartDate != nil {
