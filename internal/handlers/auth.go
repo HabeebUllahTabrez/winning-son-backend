@@ -16,13 +16,14 @@ import (
 )
 
 type AuthHandler struct {
-	db        *sqlx.DB
-	jwtSecret []byte
-	encSvc    *services.EncryptionService
+	db            *sqlx.DB
+	jwtSecret     []byte
+	jwtExpiryHrs  int
+	encSvc        *services.EncryptionService
 }
 
-func NewAuthHandler(db *sqlx.DB, jwtSecret []byte, encSvc *services.EncryptionService) *AuthHandler {
-	return &AuthHandler{db: db, jwtSecret: jwtSecret, encSvc: encSvc}
+func NewAuthHandler(db *sqlx.DB, jwtSecret []byte, jwtExpiryHrs int, encSvc *services.EncryptionService) *AuthHandler {
+	return &AuthHandler{db: db, jwtSecret: jwtSecret, jwtExpiryHrs: jwtExpiryHrs, encSvc: encSvc}
 }
 
 type credentials struct {
@@ -126,7 +127,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandler) issueJWT(userID int) (string, error) {
 	claims := jwt.MapClaims{
 		"sub": userID,
-		"exp": time.Now().Add(24 * time.Hour).Unix(),
+		"exp": time.Now().Add(time.Duration(h.jwtExpiryHrs) * time.Hour).Unix(),
 		"iat": time.Now().Unix(),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
