@@ -58,6 +58,13 @@ func main() {
 		logger.Fatal("JWT_SECRET is required")
 	}
 
+	jwtExpiryHrs := 168 // Default: 7 days
+	if expiryStr := os.Getenv("JWT_EXPIRY_HOURS"); expiryStr != "" {
+		if expiry, err := time.ParseDuration(expiryStr + "h"); err == nil {
+			jwtExpiryHrs = int(expiry.Hours())
+		}
+	}
+
 	encryptionKey := os.Getenv("ENCRYPTION_KEY")
 	if encryptionKey == "" {
 		logger.Fatal("ENCRYPTION_KEY is required (must be 32 bytes)")
@@ -134,7 +141,7 @@ func main() {
 	// 	http.Error(w, "internal server error", http.StatusInternalServerError)
 	// })
 
-	authHandler := handlers.NewAuthHandler(dbConn, []byte(jwtSecret), encSvc)
+	authHandler := handlers.NewAuthHandler(dbConn, []byte(jwtSecret), jwtExpiryHrs, encSvc)
 	journalHandler := handlers.NewJournalHandler(dbConn, encSvc)
 	dashboardHandler := handlers.NewDashboardHandler(dbConn, encSvc)
 	userHandler := handlers.NewUserHandler(dbConn, encSvc)
