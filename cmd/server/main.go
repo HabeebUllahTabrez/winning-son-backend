@@ -139,7 +139,7 @@ func main() {
 	dashboardHandler := handlers.NewDashboardHandler(dbConn, encSvc)
 	userHandler := handlers.NewUserHandler(dbConn, encSvc)
 	adminHandler := handlers.NewAdminHandler(dbConn)
-	migrateHandler := handlers.NewMigrateHandler(dbConn)
+	migrateHandler := handlers.NewMigrateHandler(dbConn, encSvc)
 	authMW := mw.NewAuthMiddleware([]byte(jwtSecret))
 
 	routeAPI := func(api chi.Router) {

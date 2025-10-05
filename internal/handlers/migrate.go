@@ -7,15 +7,19 @@ import (
 	"strings"
 	"time"
 
+	"winsonin/internal/models"
+	"winsonin/internal/services"
+
 	"github.com/jmoiron/sqlx"
 )
 
 type MigrateHandler struct {
-	db *sqlx.DB
+	db     *sqlx.DB
+	encSvc *services.EncryptionService
 }
 
-func NewMigrateHandler(db *sqlx.DB) *MigrateHandler {
-	return &MigrateHandler{db: db}
+func NewMigrateHandler(db *sqlx.DB, encSvc *services.EncryptionService) *MigrateHandler {
+	return &MigrateHandler{db: db, encSvc: encSvc}
 }
 
 type UserProfileData struct {
@@ -151,7 +155,14 @@ func (h *MigrateHandler) MigrateData(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			if _, err := stmt.Exec(userID, parsedLocalDate, entry.Topics, entry.AlignmentRating, entry.ContentmentRating); err != nil {
+			// Encrypt topics before storing
+			tempJournal := models.Journal{Topics: entry.Topics}
+			if err := h.encSvc.EncryptJournal(&tempJournal); err != nil {
+				http.Error(w, "could not encrypt topics", http.StatusInternalServerError)
+				return
+			}
+
+			if _, err := stmt.Exec(userID, parsedLocalDate, tempJournal.Topics, entry.AlignmentRating, entry.ContentmentRating); err != nil {
 				http.Error(w, "could not save entry", http.StatusInternalServerError)
 				return
 			}
