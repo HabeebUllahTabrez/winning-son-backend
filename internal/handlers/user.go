@@ -25,7 +25,7 @@ func NewUserHandler(db *sqlx.DB, encSvc *services.EncryptionService) *UserHandle
 func (h *UserHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 	userID := r.Context().Value("userID").(int)
 	var u models.User
-	if err := h.db.Get(&u, `SELECT id, email, email_blind_index, password_hash, created_at, first_name, last_name, avatar_id, goal, start_date, end_date, is_admin FROM users WHERE id=$1`, userID); err != nil {
+	if err := h.db.Get(&u, `SELECT id, email, email_blind_index, password_hash, created_at, first_name, last_name, avatar_id, is_admin FROM users WHERE id=$1`, userID); err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
@@ -34,8 +34,23 @@ func (h *UserHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "could not decrypt user data", http.StatusInternalServerError)
 		return
 	}
+
+	// Fetch user's goal if it exists
+	var goal models.Goal
+	var goalPtr *models.Goal
+	err := h.db.Get(&goal, `SELECT id, user_id, goal, start_date, end_date, created_at, updated_at FROM goals WHERE user_id=$1`, userID)
+	if err == nil {
+		// Goal exists, decrypt it
+		if err := h.encSvc.DecryptGoal(&goal); err != nil {
+			http.Error(w, "could not decrypt goal data", http.StatusInternalServerError)
+			return
+		}
+		goalPtr = &goal
+	}
+	// If error is sql.ErrNoRows, goalPtr remains nil which is fine
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(ToUserDTO(u))
+	json.NewEncoder(w).Encode(ToUserDTO(u, goalPtr))
 }
 
 // UpdateMe updates provided fields on the current user's profile
@@ -55,7 +70,7 @@ func (h *UserHandler) UpdateMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build dynamic update
+	// Build dynamic update for user table
 	setClauses := []string{}
 	args := []interface{}{}
 	argIdx := 1
@@ -74,61 +89,154 @@ func (h *UserHandler) UpdateMe(w http.ResponseWriter, r *http.Request) {
 		args = append(args, *body.AvatarID)
 		argIdx++
 	}
-	if body.Goal != nil {
-		// Encrypt goal before storing
-		tempUser := models.User{Goal: body.Goal}
-		if err := h.encSvc.EncryptUser(&tempUser); err != nil {
-			http.Error(w, "could not encrypt goal", http.StatusInternalServerError)
-			return
-		}
-		setClauses = append(setClauses, "goal=$"+itoa(argIdx))
-		args = append(args, tempUser.Goal)
-		argIdx++
-	}
-	if body.StartDate != nil {
-		if *body.StartDate == "" {
-			setClauses = append(setClauses, "start_date=NULL")
-		} else {
-			if _, err := time.Parse("2006-01-02", *body.StartDate); err != nil {
-				http.Error(w, "invalid start_date; expected YYYY-MM-DD", http.StatusBadRequest)
-				return
-			}
-			setClauses = append(setClauses, "start_date=$"+itoa(argIdx))
-			args = append(args, *body.StartDate)
-			argIdx++
-		}
-	}
-	if body.EndDate != nil {
-		if *body.EndDate == "" {
-			setClauses = append(setClauses, "end_date=NULL")
-		} else {
-			if _, err := time.Parse("2006-01-02", *body.EndDate); err != nil {
-				http.Error(w, "invalid end_date; expected YYYY-MM-DD", http.StatusBadRequest)
-				return
-			}
-			setClauses = append(setClauses, "end_date=$"+itoa(argIdx))
-			args = append(args, *body.EndDate)
-			argIdx++
-		}
-	}
 	// is_admin only allowed to be updated if explicitly provided; keep simple for now
 	if body.IsAdmin != nil {
 		setClauses = append(setClauses, "is_admin=$"+itoa(argIdx))
 		args = append(args, *body.IsAdmin)
 		argIdx++
 	}
-	if len(setClauses) == 0 {
+	if len(setClauses) > 0 {
+		query := "UPDATE users SET " + join(setClauses, ", ") + " WHERE id=$" + itoa(argIdx)
+		args = append(args, userID)
+		if _, err := h.db.Exec(query, args...); err != nil {
+			http.Error(w, "could not update", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	// Handle goal update separately in goals table
+	hasGoalUpdate := body.Goal != nil || body.StartDate != nil || body.EndDate != nil
+	if hasGoalUpdate {
+		// Parse dates if provided
+		var startDate, endDate interface{}
+		startDate = nil
+		endDate = nil
+
+		if body.StartDate != nil {
+			if *body.StartDate == "" {
+				startDate = nil
+			} else {
+				parsed, err := parseDate(*body.StartDate)
+				if err != nil {
+					http.Error(w, "invalid start_date; expected YYYY-MM-DD", http.StatusBadRequest)
+					return
+				}
+				startDate = parsed
+			}
+		}
+		if body.EndDate != nil {
+			if *body.EndDate == "" {
+				endDate = nil
+			} else {
+				parsed, err := parseDate(*body.EndDate)
+				if err != nil {
+					http.Error(w, "invalid end_date; expected YYYY-MM-DD", http.StatusBadRequest)
+					return
+				}
+				endDate = parsed
+			}
+		}
+
+		if body.Goal != nil {
+			// Encrypt goal before storing
+			tempGoal := models.Goal{Goal: *body.Goal}
+			if err := h.encSvc.EncryptGoal(&tempGoal); err != nil {
+				http.Error(w, "could not encrypt goal", http.StatusInternalServerError)
+				return
+			}
+
+			// Upsert goal with dates
+			if body.StartDate != nil && body.EndDate != nil {
+				_, err := h.db.Exec(`
+					INSERT INTO goals (user_id, goal, start_date, end_date, created_at, updated_at)
+					VALUES ($1, $2, $3, $4, NOW(), NOW())
+					ON CONFLICT (user_id) DO UPDATE
+					SET goal = EXCLUDED.goal,
+						start_date = EXCLUDED.start_date,
+						end_date = EXCLUDED.end_date,
+						updated_at = NOW()`,
+					userID, tempGoal.Goal, startDate, endDate)
+				if err != nil {
+					http.Error(w, "could not save goal", http.StatusInternalServerError)
+					return
+				}
+			} else if body.StartDate != nil {
+				_, err := h.db.Exec(`
+					INSERT INTO goals (user_id, goal, start_date, created_at, updated_at)
+					VALUES ($1, $2, $3, NOW(), NOW())
+					ON CONFLICT (user_id) DO UPDATE
+					SET goal = EXCLUDED.goal,
+						start_date = EXCLUDED.start_date,
+						updated_at = NOW()`,
+					userID, tempGoal.Goal, startDate)
+				if err != nil {
+					http.Error(w, "could not save goal", http.StatusInternalServerError)
+					return
+				}
+			} else if body.EndDate != nil {
+				_, err := h.db.Exec(`
+					INSERT INTO goals (user_id, goal, end_date, created_at, updated_at)
+					VALUES ($1, $2, $3, NOW(), NOW())
+					ON CONFLICT (user_id) DO UPDATE
+					SET goal = EXCLUDED.goal,
+						end_date = EXCLUDED.end_date,
+						updated_at = NOW()`,
+					userID, tempGoal.Goal, endDate)
+				if err != nil {
+					http.Error(w, "could not save goal", http.StatusInternalServerError)
+					return
+				}
+			} else {
+				_, err := h.db.Exec(`
+					INSERT INTO goals (user_id, goal, created_at, updated_at)
+					VALUES ($1, $2, NOW(), NOW())
+					ON CONFLICT (user_id) DO UPDATE
+					SET goal = EXCLUDED.goal,
+						updated_at = NOW()`,
+					userID, tempGoal.Goal)
+				if err != nil {
+					http.Error(w, "could not save goal", http.StatusInternalServerError)
+					return
+				}
+			}
+		} else {
+			// Only updating dates, not goal text
+			if body.StartDate != nil && body.EndDate != nil {
+				_, err := h.db.Exec(`UPDATE goals SET start_date = $1, end_date = $2, updated_at = NOW() WHERE user_id = $3`, startDate, endDate, userID)
+				if err != nil {
+					http.Error(w, "could not update goal dates", http.StatusInternalServerError)
+					return
+				}
+			} else if body.StartDate != nil {
+				_, err := h.db.Exec(`UPDATE goals SET start_date = $1, updated_at = NOW() WHERE user_id = $2`, startDate, userID)
+				if err != nil {
+					http.Error(w, "could not update start_date", http.StatusInternalServerError)
+					return
+				}
+			} else if body.EndDate != nil {
+				_, err := h.db.Exec(`UPDATE goals SET end_date = $1, updated_at = NOW() WHERE user_id = $2`, endDate, userID)
+				if err != nil {
+					http.Error(w, "could not update end_date", http.StatusInternalServerError)
+					return
+				}
+			}
+		}
+	}
+
+	if len(setClauses) == 0 && !hasGoalUpdate {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 
-	query := "UPDATE users SET " + join(setClauses, ", ") + " WHERE id=$" + itoa(argIdx)
-	args = append(args, userID)
-	if _, err := h.db.Exec(query, args...); err != nil {
-		http.Error(w, "could not update", http.StatusInternalServerError)
-		return
-	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func parseDate(dateStr string) (string, error) {
+	t, err := time.Parse("2006-01-02", dateStr)
+	if err != nil {
+		return "", err
+	}
+	return t.Format("2006-01-02"), nil
 }
 
 // Minimal helpers to avoid bringing another package just for this

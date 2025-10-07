@@ -59,7 +59,7 @@ func (h *AuthHandler) Signup(w http.ResponseWriter, r *http.Request) {
 	emailBlindIndex := tempUser.EmailBlindIndex
 
 	var user models.User
-	err = h.db.QueryRowx(`INSERT INTO users (email, email_blind_index, password_hash) VALUES ($1, $2, $3) RETURNING id, email, email_blind_index, password_hash, created_at, first_name, last_name, avatar_id, goal, start_date, end_date, is_admin`, encryptedEmail, emailBlindIndex, string(hashed)).StructScan(&user)
+	err = h.db.QueryRowx(`INSERT INTO users (email, email_blind_index, password_hash) VALUES ($1, $2, $3) RETURNING id, email, email_blind_index, password_hash, created_at, first_name, last_name, avatar_id, is_admin`, encryptedEmail, emailBlindIndex, string(hashed)).StructScan(&user)
 	if err != nil {
 		http.Error(w, "could not create user", http.StatusBadRequest)
 		return
@@ -96,7 +96,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	emailBlindIndex := h.encSvc.GenerateEmailBlindIndex(c.Email)
 
 	var user models.User
-	err := h.db.Get(&user, `SELECT id, email, email_blind_index, password_hash, created_at, first_name, last_name, avatar_id, goal, start_date, end_date, is_admin FROM users WHERE email_blind_index=$1`, emailBlindIndex)
+	err := h.db.Get(&user, `SELECT id, email, email_blind_index, password_hash, created_at, first_name, last_name, avatar_id, is_admin FROM users WHERE email_blind_index=$1`, emailBlindIndex)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			http.Error(w, "invalid credentials", http.StatusUnauthorized)

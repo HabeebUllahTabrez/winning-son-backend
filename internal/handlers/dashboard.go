@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -66,7 +67,7 @@ func (h *DashboardHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	// Fetch basic user profile to include in dashboard
 	var user models.User
-	if err := h.db.Get(&user, `SELECT id, email, email_blind_index, password_hash, created_at, first_name, last_name, avatar_id, goal, start_date, end_date, is_admin FROM users WHERE id=$1`, userID); err != nil {
+	if err := h.db.Get(&user, `SELECT id, email, email_blind_index, password_hash, created_at, first_name, last_name, avatar_id, is_admin FROM users WHERE id=$1`, userID); err != nil {
 		http.Error(w, "could not fetch user", http.StatusInternalServerError)
 		return
 	}
@@ -77,19 +78,37 @@ func (h *DashboardHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Fetch user's goal if it exists
+	var goal models.Goal
+	var goalPtr *models.Goal
+	err := h.db.Get(&goal, `SELECT id, user_id, goal, start_date, end_date, created_at, updated_at FROM goals WHERE user_id=$1`, userID)
+	if err == nil {
+		// Goal exists, decrypt it
+		if err := h.encSvc.DecryptGoal(&goal); err != nil {
+			http.Error(w, "could not decrypt goal data", http.StatusInternalServerError)
+			return
+		}
+		goalPtr = &goal
+	} else if err != sql.ErrNoRows {
+		// Real error (not just missing goal)
+		http.Error(w, "could not fetch goal", http.StatusInternalServerError)
+		return
+	}
+	// If err == sql.ErrNoRows, goalPtr remains nil
+
 	// Determine reference date from query or default to CURRENT_DATE
 	refDateStr := r.URL.Query().Get("local_date")
 	var refDate time.Time
-	var err error
+	var parseErr error
 	if refDateStr == "" {
 		// Use database's CURRENT_DATE as canonical reference by reading it
-		if err = h.db.QueryRowx("SELECT CURRENT_DATE").Scan(&refDate); err != nil {
+		if parseErr = h.db.QueryRowx("SELECT CURRENT_DATE").Scan(&refDate); parseErr != nil {
 			http.Error(w, "could not determine current date", http.StatusInternalServerError)
 			return
 		}
 	} else {
-		refDate, err = time.Parse("2006-01-02", refDateStr)
-		if err != nil {
+		refDate, parseErr = time.Parse("2006-01-02", refDateStr)
+		if parseErr != nil {
 			http.Error(w, "invalid local_date format; expected YYYY-MM-DD", http.StatusBadRequest)
 			return
 		}
@@ -171,7 +190,7 @@ func (h *DashboardHandler) Get(w http.ResponseWriter, r *http.Request) {
 		AverageMonthKarma: Karma(avgMonthKarma),
 		CurrentStreakDays: streak,
 		Last7DaysTrend:    trend,
-		User:              ToUserDTO(user),
+		User:              ToUserDTO(user, goalPtr),
 	}
 
 	w.Header().Set("Content-Type", "application/json")

@@ -29,18 +29,25 @@ func toDateStringPtr(t *time.Time) *string {
 	return &s
 }
 
-func ToUserDTO(u models.User) UserDTO {
+// ToUserDTO converts User and optional Goal to UserDTO
+func ToUserDTO(u models.User, g *models.Goal) UserDTO {
 	created := u.CreatedAt.Format(time.RFC3339)
-	return UserDTO{
+	dto := UserDTO{
 		ID:        u.ID,
 		Email:     u.Email,
 		CreatedAt: created,
 		FirstName: u.FirstName,
 		LastName:  u.LastName,
 		AvatarID:  u.AvatarID,
-		Goal:      u.Goal,
-		StartDate: toDateStringPtr(u.StartDate),
-		EndDate:   toDateStringPtr(u.EndDate),
 		IsAdmin:   u.IsAdmin,
 	}
+
+	// Add goal fields if goal exists
+	if g != nil {
+		dto.Goal = &g.Goal
+		dto.StartDate = toDateStringPtr(g.StartDate)
+		dto.EndDate = toDateStringPtr(g.EndDate)
+	}
+
+	return dto
 }

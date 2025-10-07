@@ -3,18 +3,25 @@ package models
 import "time"
 
 type User struct {
-	ID              int        `db:"id" json:"id"`
-	Email           string     `db:"email" json:"email"`                         // Encrypted in DB
-	EmailBlindIndex string     `db:"email_blind_index" json:"-"`                 // HMAC hash for searching
-	PasswordHash    string     `db:"password_hash" json:"-"`
-	CreatedAt       time.Time  `db:"created_at" json:"created_at"`
-	FirstName       *string    `db:"first_name" json:"first_name,omitempty"`
-	LastName        *string    `db:"last_name" json:"last_name,omitempty"`
-	AvatarID        *int       `db:"avatar_id" json:"avatar_id,omitempty"`
-	Goal            *string    `db:"goal" json:"goal,omitempty"`                 // Encrypted in DB
-	StartDate       *time.Time `db:"start_date" json:"start_date,omitempty"`
-	EndDate         *time.Time `db:"end_date" json:"end_date,omitempty"`
-	IsAdmin         bool       `db:"is_admin" json:"is_admin"`
+	ID              int       `db:"id" json:"id"`
+	Email           string    `db:"email" json:"email"`                     // Encrypted in DB
+	EmailBlindIndex string    `db:"email_blind_index" json:"-"`             // HMAC hash for searching
+	PasswordHash    string    `db:"password_hash" json:"-"`
+	CreatedAt       time.Time `db:"created_at" json:"created_at"`
+	FirstName       *string   `db:"first_name" json:"first_name,omitempty"`
+	LastName        *string   `db:"last_name" json:"last_name,omitempty"`
+	AvatarID        *int      `db:"avatar_id" json:"avatar_id,omitempty"`
+	IsAdmin         bool      `db:"is_admin" json:"is_admin"`
+}
+
+type Goal struct {
+	ID        int        `db:"id" json:"id"`
+	UserID    int        `db:"user_id" json:"user_id"`
+	Goal      string     `db:"goal" json:"goal"`                       // Encrypted in DB
+	StartDate *time.Time `db:"start_date" json:"start_date,omitempty"`
+	EndDate   *time.Time `db:"end_date" json:"end_date,omitempty"`
+	CreatedAt time.Time  `db:"created_at" json:"created_at"`
+	UpdatedAt time.Time  `db:"updated_at" json:"updated_at"`
 }
 
 type Journal struct {

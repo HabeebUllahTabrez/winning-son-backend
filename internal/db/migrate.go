@@ -29,6 +29,17 @@ CREATE TABLE IF NOT EXISTS journal_entries (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE(user_id, local_date)
 );
+
+CREATE TABLE IF NOT EXISTS goals (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    goal TEXT NOT NULL,
+    start_date DATE,
+    end_date DATE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(user_id)
+);
 `
 	_, err := db.ExecContext(context.Background(), schema)
 	if err != nil {
@@ -111,6 +122,24 @@ DO $$ BEGIN
         -- Backfill karma for existing entries
         UPDATE journal_entries
         SET karma = (alignment_rating + contentment_rating - 2) / 18.0;
+    END IF;
+END $$;
+-- Migrate existing goal data from users to goals table
+DO $$ BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='goal'
+    ) THEN
+        -- Insert existing goals into goals table (only for users with a goal set)
+        INSERT INTO goals (user_id, goal, start_date, end_date)
+        SELECT id, goal, start_date, end_date
+        FROM users
+        WHERE goal IS NOT NULL
+        ON CONFLICT (user_id) DO NOTHING;
+
+        -- Drop the goal-related columns from users table
+        ALTER TABLE users DROP COLUMN IF EXISTS goal;
+        ALTER TABLE users DROP COLUMN IF EXISTS start_date;
+        ALTER TABLE users DROP COLUMN IF EXISTS end_date;
     END IF;
 END $$;`
 	_, err = db.ExecContext(context.Background(), alters)
