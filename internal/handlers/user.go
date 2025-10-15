@@ -25,7 +25,7 @@ func NewUserHandler(db *sqlx.DB, encSvc *services.EncryptionService) *UserHandle
 func (h *UserHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 	userID := r.Context().Value("userID").(int)
 	var u models.User
-	if err := h.db.Get(&u, `SELECT id, email, email_blind_index, password_hash, created_at, first_name, last_name, avatar_id, is_admin FROM users WHERE id=$1`, userID); err != nil {
+	if err := h.db.Get(&u, `SELECT id, email, email_blind_index, password_hash, created_at, first_name, last_name, avatar_id, is_admin, has_created_first_log, first_log_created_at, has_used_analyzer, first_analyzer_used_at FROM users WHERE id=$1`, userID); err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
@@ -51,6 +51,36 @@ func (h *UserHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(ToUserDTO(u, goalPtr))
+}
+
+// GetFeatureStatus returns onboarding/feature completion status for the current user
+func (h *UserHandler) GetFeatureStatus(w http.ResponseWriter, r *http.Request) {
+	userID := r.Context().Value("userID").(int)
+
+	var status struct {
+		HasCreatedFirstLog  bool       `json:"has_created_first_log"`
+		FirstLogCreatedAt   *time.Time `json:"first_log_created_at,omitempty"`
+		HasUsedAnalyzer     bool       `json:"has_used_analyzer"`
+		FirstAnalyzerUsedAt *time.Time `json:"first_analyzer_used_at,omitempty"`
+	}
+
+	err := h.db.QueryRow(`
+		SELECT has_created_first_log, first_log_created_at, has_used_analyzer, first_analyzer_used_at
+		FROM users
+		WHERE id = $1`, userID).Scan(
+		&status.HasCreatedFirstLog,
+		&status.FirstLogCreatedAt,
+		&status.HasUsedAnalyzer,
+		&status.FirstAnalyzerUsedAt,
+	)
+
+	if err != nil {
+		http.Error(w, "could not fetch feature status", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(status)
 }
 
 // UpdateMe updates provided fields on the current user's profile

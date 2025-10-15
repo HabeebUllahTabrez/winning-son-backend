@@ -67,7 +67,7 @@ func (h *DashboardHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	// Fetch basic user profile to include in dashboard
 	var user models.User
-	if err := h.db.Get(&user, `SELECT id, email, email_blind_index, password_hash, created_at, first_name, last_name, avatar_id, is_admin FROM users WHERE id=$1`, userID); err != nil {
+	if err := h.db.Get(&user, `SELECT id, email, email_blind_index, password_hash, created_at, first_name, last_name, avatar_id, is_admin, has_created_first_log, first_log_created_at, has_used_analyzer, first_analyzer_used_at FROM users WHERE id=$1`, userID); err != nil {
 		http.Error(w, "could not fetch user", http.StatusInternalServerError)
 		return
 	}

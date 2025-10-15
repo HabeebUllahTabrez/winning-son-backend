@@ -141,6 +141,40 @@ DO $$ BEGIN
         ALTER TABLE users DROP COLUMN IF EXISTS start_date;
         ALTER TABLE users DROP COLUMN IF EXISTS end_date;
     END IF;
+END $$;
+-- Add feature tracking columns for onboarding
+DO $$ BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='has_created_first_log'
+    ) THEN
+        ALTER TABLE users ADD COLUMN has_created_first_log BOOLEAN NOT NULL DEFAULT false;
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='first_log_created_at'
+    ) THEN
+        ALTER TABLE users ADD COLUMN first_log_created_at TIMESTAMPTZ;
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='has_used_analyzer'
+    ) THEN
+        ALTER TABLE users ADD COLUMN has_used_analyzer BOOLEAN NOT NULL DEFAULT false;
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='first_analyzer_used_at'
+    ) THEN
+        ALTER TABLE users ADD COLUMN first_analyzer_used_at TIMESTAMPTZ;
+    END IF;
+    -- Backfill has_created_first_log for existing users with journal entries
+    UPDATE users
+    SET has_created_first_log = true,
+        first_log_created_at = (
+            SELECT MIN(created_at)
+            FROM journal_entries
+            WHERE journal_entries.user_id = users.id
+        )
+    WHERE EXISTS (
+        SELECT 1 FROM journal_entries WHERE journal_entries.user_id = users.id
+    ) AND has_created_first_log = false;
 END $$;`
 	_, err = db.ExecContext(context.Background(), alters)
 	return err

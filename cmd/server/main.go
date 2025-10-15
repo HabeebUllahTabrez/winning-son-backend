@@ -147,6 +147,7 @@ func main() {
 	userHandler := handlers.NewUserHandler(dbConn, encSvc)
 	adminHandler := handlers.NewAdminHandler(dbConn)
 	migrateHandler := handlers.NewMigrateHandler(dbConn, encSvc)
+	analyzerHandler := handlers.NewAnalyzerHandler(dbConn, encSvc)
 	authMW := mw.NewAuthMiddleware([]byte(jwtSecret))
 
 	routeAPI := func(api chi.Router) {
@@ -162,6 +163,8 @@ func main() {
 			pr.Get("/dashboard/submission-history", dashboardHandler.GetSubmissionHistory)
 			pr.Get("/me", userHandler.GetMe)
 			pr.Put("/me", userHandler.UpdateMe)
+			pr.Get("/me/feature-status", userHandler.GetFeatureStatus)
+			pr.Post("/analyzer/mark-used", analyzerHandler.MarkAnalyzerUsed)
 			pr.Get("/admin/overview", adminHandler.Overview)
 		})
 	}
