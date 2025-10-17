@@ -29,6 +29,17 @@ CREATE TABLE IF NOT EXISTS journal_entries (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE(user_id, local_date)
 );
+
+CREATE TABLE IF NOT EXISTS goals (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    goal TEXT NOT NULL,
+    start_date DATE,
+    end_date DATE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(user_id)
+);
 `
 	_, err := db.ExecContext(context.Background(), schema)
 	if err != nil {
@@ -112,6 +123,58 @@ DO $$ BEGIN
         UPDATE journal_entries
         SET karma = (alignment_rating + contentment_rating - 2) / 18.0;
     END IF;
+END $$;
+-- Migrate existing goal data from users to goals table
+DO $$ BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='goal'
+    ) THEN
+        -- Insert existing goals into goals table (only for users with a goal set)
+        INSERT INTO goals (user_id, goal, start_date, end_date)
+        SELECT id, goal, start_date, end_date
+        FROM users
+        WHERE goal IS NOT NULL
+        ON CONFLICT (user_id) DO NOTHING;
+
+        -- Drop the goal-related columns from users table
+        ALTER TABLE users DROP COLUMN IF EXISTS goal;
+        ALTER TABLE users DROP COLUMN IF EXISTS start_date;
+        ALTER TABLE users DROP COLUMN IF EXISTS end_date;
+    END IF;
+END $$;
+-- Add feature tracking columns for onboarding
+DO $$ BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='has_created_first_log'
+    ) THEN
+        ALTER TABLE users ADD COLUMN has_created_first_log BOOLEAN NOT NULL DEFAULT false;
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='first_log_created_at'
+    ) THEN
+        ALTER TABLE users ADD COLUMN first_log_created_at TIMESTAMPTZ;
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='has_used_analyzer'
+    ) THEN
+        ALTER TABLE users ADD COLUMN has_used_analyzer BOOLEAN NOT NULL DEFAULT false;
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='first_analyzer_used_at'
+    ) THEN
+        ALTER TABLE users ADD COLUMN first_analyzer_used_at TIMESTAMPTZ;
+    END IF;
+    -- Backfill has_created_first_log for existing users with journal entries
+    UPDATE users
+    SET has_created_first_log = true,
+        first_log_created_at = (
+            SELECT MIN(created_at)
+            FROM journal_entries
+            WHERE journal_entries.user_id = users.id
+        )
+    WHERE EXISTS (
+        SELECT 1 FROM journal_entries WHERE journal_entries.user_id = users.id
+    ) AND has_created_first_log = false;
 END $$;`
 	_, err = db.ExecContext(context.Background(), alters)
 	return err

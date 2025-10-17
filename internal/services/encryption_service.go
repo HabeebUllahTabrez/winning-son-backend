@@ -29,15 +29,6 @@ func (s *EncryptionService) EncryptUser(user *models.User) error {
 	user.Email = encryptedEmail
 	user.EmailBlindIndex = blindIndex
 
-	// Encrypt goal if present
-	if user.Goal != nil && *user.Goal != "" {
-		encryptedGoal, err := s.crypto.Encrypt(*user.Goal)
-		if err != nil {
-			return err
-		}
-		user.Goal = &encryptedGoal
-	}
-
 	return nil
 }
 
@@ -50,15 +41,30 @@ func (s *EncryptionService) DecryptUser(user *models.User) error {
 	}
 	user.Email = decryptedEmail
 
-	// Decrypt goal if present
-	if user.Goal != nil && *user.Goal != "" {
-		decryptedGoal, err := s.crypto.Decrypt(*user.Goal)
+	return nil
+}
+
+// EncryptGoal encrypts sensitive goal fields before storing in DB
+func (s *EncryptionService) EncryptGoal(goal *models.Goal) error {
+	if goal.Goal != "" {
+		encryptedGoal, err := s.crypto.Encrypt(goal.Goal)
 		if err != nil {
 			return err
 		}
-		user.Goal = &decryptedGoal
+		goal.Goal = encryptedGoal
 	}
+	return nil
+}
 
+// DecryptGoal decrypts sensitive goal fields after retrieving from DB
+func (s *EncryptionService) DecryptGoal(goal *models.Goal) error {
+	if goal.Goal != "" {
+		decryptedGoal, err := s.crypto.Decrypt(goal.Goal)
+		if err != nil {
+			return err
+		}
+		goal.Goal = decryptedGoal
+	}
 	return nil
 }
 

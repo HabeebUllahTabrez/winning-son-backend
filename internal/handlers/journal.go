@@ -71,6 +71,17 @@ func (h *JournalHandler) UpsertEntry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Track first log creation for this user
+	_, err = h.db.Exec(`
+		UPDATE users
+		SET has_created_first_log = true,
+		    first_log_created_at = COALESCE(first_log_created_at, NOW())
+		WHERE id = $1 AND has_created_first_log = false`, userID)
+	if err != nil {
+		// Log error but don't fail the request
+		// The journal entry was successfully saved
+	}
+
 	// Return success with the local date that was used
 	response := map[string]interface{}{
 		"message":    "Entry saved successfully",

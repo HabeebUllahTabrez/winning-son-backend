@@ -67,72 +67,76 @@ func (h *MigrateHandler) MigrateData(w http.ResponseWriter, r *http.Request) {
 
 	// Handle profile update
 	if req.Profile != nil {
-		setClauses := []string{}
-		args := []interface{}{}
-		argIdx := 1
+		// Update user fields (non-goal fields)
+		userSetClauses := []string{}
+		userArgs := []interface{}{}
+		userArgIdx := 1
 
 		if req.Profile.FirstName != nil {
-			setClauses = append(setClauses, fmt.Sprintf("first_name=$%d", argIdx))
-			args = append(args, *req.Profile.FirstName)
-			argIdx++
+			userSetClauses = append(userSetClauses, fmt.Sprintf("first_name=$%d", userArgIdx))
+			userArgs = append(userArgs, *req.Profile.FirstName)
+			userArgIdx++
 		}
 		if req.Profile.LastName != nil {
-			setClauses = append(setClauses, fmt.Sprintf("last_name=$%d", argIdx))
-			args = append(args, *req.Profile.LastName)
-			argIdx++
+			userSetClauses = append(userSetClauses, fmt.Sprintf("last_name=$%d", userArgIdx))
+			userArgs = append(userArgs, *req.Profile.LastName)
+			userArgIdx++
 		}
 		if req.Profile.AvatarID != nil {
-			setClauses = append(setClauses, fmt.Sprintf("avatar_id=$%d", argIdx))
-			args = append(args, *req.Profile.AvatarID)
-			argIdx++
+			userSetClauses = append(userSetClauses, fmt.Sprintf("avatar_id=$%d", userArgIdx))
+			userArgs = append(userArgs, *req.Profile.AvatarID)
+			userArgIdx++
 		}
-		if req.Profile.Goal != nil {
-			// Encrypt goal before storing
-			encryptedGoal := *req.Profile.Goal
-			if encryptedGoal != "" {
-				tempUser := models.User{Goal: &encryptedGoal}
-				if err := h.encSvc.EncryptUser(&tempUser); err != nil {
-					http.Error(w, "could not encrypt goal", http.StatusInternalServerError)
-					return
-				}
-				encryptedGoal = *tempUser.Goal
+
+		if len(userSetClauses) > 0 {
+			query := "UPDATE users SET " + strings.Join(userSetClauses, ", ") + fmt.Sprintf(" WHERE id=$%d", userArgIdx)
+			userArgs = append(userArgs, userID)
+			if _, err := tx.Exec(query, userArgs...); err != nil {
+				http.Error(w, "could not update user profile", http.StatusInternalServerError)
+				return
 			}
-			setClauses = append(setClauses, fmt.Sprintf("goal=$%d", argIdx))
-			args = append(args, encryptedGoal)
-			argIdx++
 		}
-		if req.Profile.StartDate != nil {
-			if *req.Profile.StartDate == "" {
-				setClauses = append(setClauses, "start_date=NULL")
-			} else {
-				if _, err := time.Parse("2006-01-02", *req.Profile.StartDate); err != nil {
+
+		// Handle goal separately - upsert into goals table
+		if req.Profile.Goal != nil && *req.Profile.Goal != "" {
+			// Parse dates if provided
+			var startDate, endDate *time.Time
+			if req.Profile.StartDate != nil && *req.Profile.StartDate != "" {
+				parsed, err := time.Parse("2006-01-02", *req.Profile.StartDate)
+				if err != nil {
 					http.Error(w, "invalid start_date; expected YYYY-MM-DD", http.StatusBadRequest)
 					return
 				}
-				setClauses = append(setClauses, fmt.Sprintf("start_date=$%d", argIdx))
-				args = append(args, *req.Profile.StartDate)
-				argIdx++
+				startDate = &parsed
 			}
-		}
-		if req.Profile.EndDate != nil {
-			if *req.Profile.EndDate == "" {
-				setClauses = append(setClauses, "end_date=NULL")
-			} else {
-				if _, err := time.Parse("2006-01-02", *req.Profile.EndDate); err != nil {
+			if req.Profile.EndDate != nil && *req.Profile.EndDate != "" {
+				parsed, err := time.Parse("2006-01-02", *req.Profile.EndDate)
+				if err != nil {
 					http.Error(w, "invalid end_date; expected YYYY-MM-DD", http.StatusBadRequest)
 					return
 				}
-				setClauses = append(setClauses, fmt.Sprintf("end_date=$%d", argIdx))
-				args = append(args, *req.Profile.EndDate)
-				argIdx++
+				endDate = &parsed
 			}
-		}
 
-		if len(setClauses) > 0 {
-			query := "UPDATE users SET " + strings.Join(setClauses, ", ") + fmt.Sprintf(" WHERE id=$%d", argIdx)
-			args = append(args, userID)
-			if _, err := tx.Exec(query, args...); err != nil {
-				http.Error(w, "could not update user profile", http.StatusInternalServerError)
+			// Encrypt goal before storing
+			tempGoal := models.Goal{Goal: *req.Profile.Goal}
+			if err := h.encSvc.EncryptGoal(&tempGoal); err != nil {
+				http.Error(w, "could not encrypt goal", http.StatusInternalServerError)
+				return
+			}
+
+			// Upsert goal
+			_, err := tx.Exec(`
+				INSERT INTO goals (user_id, goal, start_date, end_date, created_at, updated_at)
+				VALUES ($1, $2, $3, $4, NOW(), NOW())
+				ON CONFLICT (user_id) DO UPDATE
+				SET goal = EXCLUDED.goal,
+					start_date = EXCLUDED.start_date,
+					end_date = EXCLUDED.end_date,
+					updated_at = NOW()`,
+				userID, tempGoal.Goal, startDate, endDate)
+			if err != nil {
+				http.Error(w, "could not save goal", http.StatusInternalServerError)
 				return
 			}
 		}
