@@ -60,8 +60,17 @@ type submissionHistoryResponse struct {
 	History   []submissionHistoryPoint `json:"history"`
 }
 
-// Get aggregates and useful metrics to power the dashboard.
-// Accepts optional query param: local_date=YYYY-MM-DD to use as the user's "today".
+// Get godoc
+// @Summary Get dashboard metrics
+// @Description Aggregates and useful metrics to power the dashboard
+// @Tags dashboard
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param local_date query string false "Reference date (YYYY-MM-DD)"
+// @Success 200 {object} dashboardResponse
+// @Failure 500 {string} string "Internal server error"
+// @Router /dashboard [get]
 func (h *DashboardHandler) Get(w http.ResponseWriter, r *http.Request) {
 	userID := r.Context().Value("userID").(int)
 
@@ -197,9 +206,19 @@ func (h *DashboardHandler) Get(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-// GetSubmissionHistory returns whether the user has submissions for each day in a date range.
-// Accepts query params: start_date=YYYY-MM-DD, end_date=YYYY-MM-DD (required).
-// The date range is limited to a maximum of 365 days.
+// GetSubmissionHistory godoc
+// @Summary Get submission history
+// @Description Returns whether the user has submissions for each day in a date range (max 365 days)
+// @Tags dashboard
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param start_date query string true "Start date (YYYY-MM-DD)"
+// @Param end_date query string true "End date (YYYY-MM-DD)"
+// @Success 200 {object} submissionHistoryResponse
+// @Failure 400 {string} string "Bad request"
+// @Failure 500 {string} string "Internal server error"
+// @Router /dashboard/submission-history [get]
 func (h *DashboardHandler) GetSubmissionHistory(w http.ResponseWriter, r *http.Request) {
 	userID := r.Context().Value("userID").(int)
 

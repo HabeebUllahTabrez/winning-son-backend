@@ -31,6 +31,17 @@ type credentials struct {
 	Password string `json:"password"`
 }
 
+// Signup godoc
+// @Summary User signup
+// @Description Create a new user account
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param credentials body credentials true "User credentials"
+// @Success 200 {object} map[string]interface{} "token"
+// @Failure 400 {string} string "Bad request"
+// @Failure 500 {string} string "Internal server error"
+// @Router /auth/signup [post]
 func (h *AuthHandler) Signup(w http.ResponseWriter, r *http.Request) {
 	var c credentials
 	if err := json.NewDecoder(r.Body).Decode(&c); err != nil {
@@ -80,6 +91,18 @@ func (h *AuthHandler) Signup(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]any{"token": token})
 }
 
+// Login godoc
+// @Summary User login
+// @Description Authenticate user and return JWT token
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param credentials body credentials true "User credentials"
+// @Success 200 {object} map[string]interface{} "token"
+// @Failure 400 {string} string "Bad request"
+// @Failure 401 {string} string "Invalid credentials"
+// @Failure 500 {string} string "Internal server error"
+// @Router /auth/login [post]
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	var c credentials
 	if err := json.NewDecoder(r.Body).Decode(&c); err != nil {

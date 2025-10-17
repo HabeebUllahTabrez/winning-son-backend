@@ -43,7 +43,18 @@ type MigrateRequest struct {
 	Profile *UserProfileData       `json:"profile"`
 }
 
-// MigrateData receives a list of journal entries and/or user profile data and upserts them for the authenticated user.
+// MigrateData godoc
+// @Summary Migrate user data
+// @Description Receives a list of journal entries and/or user profile data and upserts them for the authenticated user
+// @Tags migrate
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param data body MigrateRequest true "Migration data"
+// @Success 201 {object} map[string]interface{} "Data migrated successfully"
+// @Failure 400 {string} string "Bad request"
+// @Failure 500 {string} string "Internal server error"
+// @Router /migrate [post]
 func (h *MigrateHandler) MigrateData(w http.ResponseWriter, r *http.Request) {
 	userID := r.Context().Value("userID").(int)
 

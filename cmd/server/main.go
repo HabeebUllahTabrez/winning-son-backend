@@ -16,13 +16,34 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
 	"github.com/joho/godotenv"
+	httpSwagger "github.com/swaggo/http-swagger"
 	"go.uber.org/zap"
 
+	_ "winsonin/docs"
 	"winsonin/internal/db"
 	"winsonin/internal/handlers"
 	mw "winsonin/internal/middleware"
 	"winsonin/internal/services"
 )
+
+// @title Winning Son API
+// @version 1.0
+// @description API for journaling, goal tracking, and personal development metrics
+// @termsOfService http://swagger.io/terms/
+
+// @contact.name API Support
+// @contact.email support@example.com
+
+// @license.name MIT
+// @license.url https://opensource.org/licenses/MIT
+
+// @host localhost:8080
+// @BasePath /api
+
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description Type "Bearer" followed by a space and JWT token.
 
 func mustGetenv(key, fallback string) string {
 	v := os.Getenv(key)
@@ -170,6 +191,9 @@ func main() {
 	}
 
 	r.Route("/api", routeAPI)
+
+	// Swagger documentation endpoint
+	r.Get("/swagger/*", httpSwagger.WrapHandler)
 
 	// Health check endpoint
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {

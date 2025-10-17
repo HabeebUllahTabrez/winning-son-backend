@@ -1,0 +1,605 @@
+basePath: /api
+definitions:
+  handlers.MigrateRequest:
+    properties:
+      entries:
+        items:
+          $ref: '#/definitions/handlers.MigratedJournalEntry'
+        type: array
+      profile:
+        $ref: '#/definitions/handlers.UserProfileData'
+    type: object
+  handlers.MigratedJournalEntry:
+    properties:
+      alignment_rating:
+        type: integer
+      contentment_rating:
+        type: integer
+      local_date:
+        description: YYYY-MM-DD
+        type: string
+      topics:
+        type: string
+    type: object
+  handlers.UserDTO:
+    properties:
+      avatar_id:
+        type: integer
+      created_at:
+        type: string
+      email:
+        type: string
+      end_date:
+        type: string
+      first_analyzer_used_at:
+        type: string
+      first_log_created_at:
+        type: string
+      first_name:
+        type: string
+      goal:
+        type: string
+      has_created_first_log:
+        type: boolean
+      has_used_analyzer:
+        type: boolean
+      id:
+        type: integer
+      is_admin:
+        type: boolean
+      last_name:
+        type: string
+      start_date:
+        type: string
+    type: object
+  handlers.UserProfileData:
+    properties:
+      avatar_id:
+        type: integer
+      end_date:
+        description: YYYY-MM-DD
+        type: string
+      first_name:
+        type: string
+      goal:
+        type: string
+      last_name:
+        type: string
+      start_date:
+        description: YYYY-MM-DD
+        type: string
+    type: object
+  handlers.adminOverview:
+    properties:
+      active_users_this_week:
+        type: integer
+      entries_this_month:
+        type: integer
+      entries_this_week:
+        type: integer
+      total_journal_entries:
+        type: integer
+      total_users:
+        type: integer
+    type: object
+  handlers.credentials:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+    type: object
+  handlers.dashboardResponse:
+    properties:
+      average_month_karma:
+        type: number
+      current_streak_days:
+        type: integer
+      day_karma:
+        type: number
+      entries_this_week:
+        type: integer
+      entries_this_year:
+        type: integer
+      has_today_entry:
+        type: boolean
+      last7_days_trend:
+        items:
+          $ref: '#/definitions/handlers.trendPoint'
+        type: array
+      month_karma:
+        type: number
+      reference_date:
+        type: string
+      user:
+        $ref: '#/definitions/handlers.UserDTO'
+      week_karma:
+        type: number
+      year_karma:
+        type: number
+    type: object
+  handlers.journalEntry:
+    properties:
+      alignment_rating:
+        type: integer
+      contentment_rating:
+        type: integer
+      karma:
+        type: number
+      local_date:
+        type: string
+      topics:
+        type: string
+    type: object
+  handlers.journalRequest:
+    properties:
+      alignment_rating:
+        type: integer
+      contentment_rating:
+        type: integer
+      local_date:
+        description: YYYY-MM-DD provided by frontend
+        type: string
+      topics:
+        type: string
+    type: object
+  handlers.submissionHistoryPoint:
+    properties:
+      has_submission:
+        type: boolean
+      local_date:
+        type: string
+    type: object
+  handlers.submissionHistoryResponse:
+    properties:
+      end_date:
+        type: string
+      history:
+        items:
+          $ref: '#/definitions/handlers.submissionHistoryPoint'
+        type: array
+      start_date:
+        type: string
+    type: object
+  handlers.trendPoint:
+    properties:
+      karma:
+        type: number
+      local_date:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact:
+    email: support@example.com
+    name: API Support
+  description: API for journaling, goal tracking, and personal development metrics
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  termsOfService: http://swagger.io/terms/
+  title: Winning Son API
+  version: "1.0"
+paths:
+  /admin/overview:
+    get:
+      consumes:
+      - application/json
+      description: Returns administrative statistics and metrics (admin only)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.adminOverview'
+        "403":
+          description: Forbidden
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Get admin overview
+      tags:
+      - admin
+  /analyzer/mark-used:
+    post:
+      consumes:
+      - application/json
+      description: Marks that the user has used the analyzer feature for the first
+        time
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Analyzer usage recorded successfully
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Mark analyzer as used
+      tags:
+      - analyzer
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticate user and return JWT token
+      parameters:
+      - description: User credentials
+        in: body
+        name: credentials
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.credentials'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: token
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            type: string
+        "401":
+          description: Invalid credentials
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      summary: User login
+      tags:
+      - auth
+  /auth/signup:
+    post:
+      consumes:
+      - application/json
+      description: Create a new user account
+      parameters:
+      - description: User credentials
+        in: body
+        name: credentials
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.credentials'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: token
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      summary: User signup
+      tags:
+      - auth
+  /dashboard:
+    get:
+      consumes:
+      - application/json
+      description: Aggregates and useful metrics to power the dashboard
+      parameters:
+      - description: Reference date (YYYY-MM-DD)
+        in: query
+        name: local_date
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.dashboardResponse'
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Get dashboard metrics
+      tags:
+      - dashboard
+  /dashboard/submission-history:
+    get:
+      consumes:
+      - application/json
+      description: Returns whether the user has submissions for each day in a date
+        range (max 365 days)
+      parameters:
+      - description: Start date (YYYY-MM-DD)
+        in: query
+        name: start_date
+        required: true
+        type: string
+      - description: End date (YYYY-MM-DD)
+        in: query
+        name: end_date
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.submissionHistoryResponse'
+        "400":
+          description: Bad request
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Get submission history
+      tags:
+      - dashboard
+  /journal:
+    delete:
+      consumes:
+      - application/json
+      description: Removes a journal entry for the authenticated user by date
+      parameters:
+      - description: Local date (YYYY-MM-DD)
+        in: body
+        name: body
+        required: true
+        schema:
+          properties:
+            local_date:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No content
+        "400":
+          description: Bad request
+          schema:
+            type: string
+        "404":
+          description: Not found
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Delete journal entry
+      tags:
+      - journal
+    get:
+      consumes:
+      - application/json
+      description: Get list of journal entries with optional date range filtering
+      parameters:
+      - description: Start date (YYYY-MM-DD)
+        in: query
+        name: start_date
+        type: string
+      - description: End date (YYYY-MM-DD)
+        in: query
+        name: end_date
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/handlers.journalEntry'
+            type: array
+        "400":
+          description: Bad request
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: List journal entries
+      tags:
+      - journal
+    post:
+      consumes:
+      - application/json
+      description: Creates a new journal entry or updates an existing one for the
+        same user and date
+      parameters:
+      - description: Journal entry
+        in: body
+        name: entry
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.journalRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Entry saved successfully
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Create or update journal entry
+      tags:
+      - journal
+  /me:
+    get:
+      consumes:
+      - application/json
+      description: Returns the authenticated user's profile information
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.UserDTO'
+        "404":
+          description: Not found
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Get current user profile
+      tags:
+      - user
+    put:
+      consumes:
+      - application/json
+      description: Updates provided fields on the current user's profile
+      parameters:
+      - description: Profile fields to update
+        in: body
+        name: profile
+        required: true
+        schema:
+          properties:
+            avatar_id:
+              type: integer
+            end_date:
+              type: string
+            first_name:
+              type: string
+            goal:
+              type: string
+            is_admin:
+              type: boolean
+            last_name:
+              type: string
+            start_date:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No content
+        "400":
+          description: Bad request
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Update user profile
+      tags:
+      - user
+  /me/feature-status:
+    get:
+      consumes:
+      - application/json
+      description: Returns onboarding/feature completion status for the current user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            properties:
+              first_analyzer_used_at:
+                type: string
+              first_log_created_at:
+                type: string
+              has_created_first_log:
+                type: boolean
+              has_used_analyzer:
+                type: boolean
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Get feature status
+      tags:
+      - user
+  /migrate:
+    post:
+      consumes:
+      - application/json
+      description: Receives a list of journal entries and/or user profile data and
+        upserts them for the authenticated user
+      parameters:
+      - description: Migration data
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.MigrateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Data migrated successfully
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Migrate user data
+      tags:
+      - migrate
+securityDefinitions:
+  BearerAuth:
+    description: Type "Bearer" followed by a space and JWT token.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

@@ -28,7 +28,18 @@ type journalRequest struct {
 	LocalDate         string `json:"local_date"` // YYYY-MM-DD provided by frontend
 }
 
-// UpsertEntry creates a new journal entry or updates an existing one for the same user and local date
+// UpsertEntry godoc
+// @Summary Create or update journal entry
+// @Description Creates a new journal entry or updates an existing one for the same user and date
+// @Tags journal
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param entry body journalRequest true "Journal entry"
+// @Success 200 {object} map[string]interface{} "Entry saved successfully"
+// @Failure 400 {string} string "Bad request"
+// @Failure 500 {string} string "Internal server error"
+// @Router /journal [post]
 func (h *JournalHandler) UpsertEntry(w http.ResponseWriter, r *http.Request) {
 	userID := r.Context().Value("userID").(int)
 	var req journalRequest
@@ -101,7 +112,19 @@ type journalEntry struct {
 	Karma             float64 `json:"karma"`
 }
 
-// Delete removes a journal entry for the authenticated user by local_date (YYYY-MM-DD)
+// Delete godoc
+// @Summary Delete journal entry
+// @Description Removes a journal entry for the authenticated user by date
+// @Tags journal
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param body body object{local_date=string} true "Local date (YYYY-MM-DD)"
+// @Success 204 "No content"
+// @Failure 400 {string} string "Bad request"
+// @Failure 404 {string} string "Not found"
+// @Failure 500 {string} string "Internal server error"
+// @Router /journal [delete]
 func (h *JournalHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	userID := r.Context().Value("userID").(int)
 
@@ -135,6 +158,19 @@ func (h *JournalHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// List godoc
+// @Summary List journal entries
+// @Description Get list of journal entries with optional date range filtering
+// @Tags journal
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param start_date query string false "Start date (YYYY-MM-DD)"
+// @Param end_date query string false "End date (YYYY-MM-DD)"
+// @Success 200 {array} journalEntry
+// @Failure 400 {string} string "Bad request"
+// @Failure 500 {string} string "Internal server error"
+// @Router /journal [get]
 func (h *JournalHandler) List(w http.ResponseWriter, r *http.Request) {
 	userID := r.Context().Value("userID").(int)
 	// Optional query params: start_date, end_date (YYYY-MM-DD)

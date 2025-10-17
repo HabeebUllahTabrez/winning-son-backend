@@ -76,12 +76,64 @@ Start the backend server:
 go run ./cmd/server
 ```
 
+## API Documentation
+
+This project uses Swagger for API documentation. Once the server is running, you can access the interactive API documentation at:
+
+**Swagger UI:** `http://localhost:8080/swagger/index.html`
+
+The Swagger documentation provides:
+- Complete API endpoint reference
+- Request/response schemas
+- Interactive API testing
+- Authentication details
+
+### Regenerating Swagger Documentation
+
+If you make changes to the API handlers or annotations, regenerate the Swagger documentation:
+
+```sh
+# Quick way: Use the helper script
+./scripts/regenerate-docs.sh
+
+# Manual way:
+go install github.com/swaggo/swag/cmd/swag@latest
+~/go/bin/swag init -g cmd/server/main.go -o ./docs
+```
+
+### Sharing API Documentation
+
+You can export and share the API documentation in multiple formats:
+
+- **`docs/api-documentation-standalone.html`** - Interactive web UI (open in any browser)
+- **`docs/Winning-Son-API.postman_collection.json`** - Import into Postman for testing
+- **`docs/swagger.json`** or **`docs/swagger.yaml`** - OpenAPI spec for integration/code generation
+
+See [docs/EXPORT-GUIDE.md](docs/EXPORT-GUIDE.md) for detailed instructions on sharing documentation.
+
 ## API Endpoints
-- `/auth`      - Authentication (login, register)
-- `/user`      - User management
-- `/admin`     - Admin operations
-- `/dashboard` - Dashboard data
-- `/journal`   - Journal entries
+- **Authentication** (`/api/auth/*`)
+  - `POST /api/auth/signup` - User registration
+  - `POST /api/auth/login` - User login
+- **User Management** (`/api/me`)
+  - `GET /api/me` - Get current user profile
+  - `PUT /api/me` - Update user profile
+  - `GET /api/me/feature-status` - Get feature status
+- **Journal** (`/api/journal`)
+  - `POST /api/journal` - Create/update journal entry
+  - `GET /api/journal` - List journal entries
+  - `DELETE /api/journal` - Delete journal entry
+- **Dashboard** (`/api/dashboard`)
+  - `GET /api/dashboard` - Get dashboard metrics
+  - `GET /api/dashboard/submission-history` - Get submission history
+- **Admin** (`/api/admin/*`)
+  - `GET /api/admin/overview` - Get admin statistics
+- **Migration** (`/api/migrate`)
+  - `POST /api/migrate` - Migrate user data
+- **Analyzer** (`/api/analyzer/*`)
+  - `POST /api/analyzer/mark-used` - Mark analyzer as used
+- **Health Check**
+  - `GET /health` - Health check endpoint
 
 ## Contributing
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
