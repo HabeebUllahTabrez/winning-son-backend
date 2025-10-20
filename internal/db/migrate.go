@@ -175,7 +175,121 @@ DO $$ BEGIN
     WHERE EXISTS (
         SELECT 1 FROM journal_entries WHERE journal_entries.user_id = users.id
     ) AND has_created_first_log = false;
-END $$;`
+END $$;
+-- Create indexes for performance optimization
+CREATE INDEX IF NOT EXISTS idx_journal_entries_user_local_date ON journal_entries(user_id, local_date DESC);
+CREATE INDEX IF NOT EXISTS idx_journal_entries_user_created_at ON journal_entries(user_id, created_at);
+-- Create user_stats table for precomputed dashboard metrics
+CREATE TABLE IF NOT EXISTS user_stats (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+
+    -- Aggregate counters
+    total_days_logged INTEGER NOT NULL DEFAULT 0,
+    total_karma REAL NOT NULL DEFAULT 0,
+
+    -- Streak tracking
+    current_streak_days INTEGER NOT NULL DEFAULT 0,
+    longest_streak_ever INTEGER NOT NULL DEFAULT 0,
+    current_streak_start_date DATE,
+    last_entry_date DATE,
+
+    -- Weekly tracking (for week-over-week comparison)
+    last_week_karma REAL NOT NULL DEFAULT 0,
+    last_week_start_date DATE,
+    last_week_end_date DATE,
+
+    -- Day of week performance (JSON for flexibility)
+    day_of_week_stats JSONB DEFAULT '{}'::jsonb,
+
+    -- Metadata
+    last_updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    -- Future Tier 2/3 metrics placeholders
+    positive_days_count INTEGER NOT NULL DEFAULT 0,
+    comeback_count INTEGER NOT NULL DEFAULT 0
+);`
 	_, err = db.ExecContext(context.Background(), alters)
+	if err != nil {
+		return err
+	}
+
+	// Backfill user_stats for existing users
+	backfillStats := `
+-- Backfill user_stats with existing journal data
+INSERT INTO user_stats (
+    user_id,
+    total_days_logged,
+    total_karma,
+    current_streak_days,
+    longest_streak_ever,
+    last_entry_date,
+    positive_days_count,
+    last_updated_at
+)
+SELECT
+    user_id,
+    COUNT(*) AS total_days_logged,
+    SUM(karma) AS total_karma,
+    0 AS current_streak_days,  -- Will be calculated separately
+    0 AS longest_streak_ever,  -- Will be calculated separately
+    MAX(local_date) AS last_entry_date,
+    COUNT(*) FILTER (WHERE karma > 0.5) AS positive_days_count,
+    NOW() AS last_updated_at
+FROM journal_entries
+GROUP BY user_id
+ON CONFLICT (user_id) DO UPDATE SET
+    total_days_logged = EXCLUDED.total_days_logged,
+    total_karma = EXCLUDED.total_karma,
+    last_entry_date = EXCLUDED.last_entry_date,
+    positive_days_count = EXCLUDED.positive_days_count,
+    last_updated_at = NOW();
+
+-- Backfill streak data using CTE (this is expensive but runs only once)
+WITH user_streaks AS (
+    SELECT
+        user_id,
+        local_date,
+        local_date - (ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY local_date))::int AS grp
+    FROM journal_entries
+),
+streak_groups AS (
+    SELECT
+        user_id,
+        COUNT(*) AS streak_length,
+        MAX(local_date) AS streak_end_date
+    FROM user_streaks
+    GROUP BY user_id, grp
+),
+user_streak_stats AS (
+    SELECT
+        user_id,
+        MAX(streak_length) AS longest_streak,
+        MAX(CASE WHEN streak_end_date = (SELECT MAX(local_date) FROM journal_entries je WHERE je.user_id = streak_groups.user_id)
+            THEN streak_length ELSE 0 END) AS current_streak
+    FROM streak_groups
+    GROUP BY user_id
+)
+UPDATE user_stats
+SET
+    longest_streak_ever = COALESCE(uss.longest_streak, 0),
+    current_streak_days = COALESCE(uss.current_streak, 0),
+    last_updated_at = NOW()
+FROM user_streak_stats uss
+WHERE user_stats.user_id = uss.user_id;`
+
+	_, err = db.ExecContext(context.Background(), backfillStats)
+	if err != nil {
+		return err
+	}
+
+	// Ensure ALL users have a user_stats row (even if they have no journal entries yet)
+	ensureAllUserStats := `
+INSERT INTO user_stats (user_id, total_days_logged, total_karma, current_streak_days, longest_streak_ever, last_week_karma, positive_days_count, comeback_count)
+SELECT id, 0, 0, 0, 0, 0, 0, 0
+FROM users
+WHERE NOT EXISTS (SELECT 1 FROM user_stats WHERE user_stats.user_id = users.id)
+ON CONFLICT (user_id) DO NOTHING;`
+
+	_, err = db.ExecContext(context.Background(), ensureAllUserStats)
 	return err
 }

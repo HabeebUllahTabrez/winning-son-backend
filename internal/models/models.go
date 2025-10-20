@@ -39,3 +39,20 @@ type Journal struct {
 	CreatedAt         time.Time `db:"created_at" json:"created_at"`
 	UpdatedAt         time.Time `db:"updated_at" json:"updated_at"`
 }
+
+type UserStats struct {
+	UserID                   int        `db:"user_id" json:"user_id"`
+	TotalDaysLogged          int        `db:"total_days_logged" json:"total_days_logged"`
+	TotalKarma               float64    `db:"total_karma" json:"total_karma"`
+	CurrentStreakDays        int        `db:"current_streak_days" json:"current_streak_days"`
+	LongestStreakEver        int        `db:"longest_streak_ever" json:"longest_streak_ever"`
+	CurrentStreakStartDate   *time.Time `db:"current_streak_start_date" json:"current_streak_start_date,omitempty"`
+	LastEntryDate            *time.Time `db:"last_entry_date" json:"last_entry_date,omitempty"`
+	LastWeekKarma            float64    `db:"last_week_karma" json:"last_week_karma"`
+	LastWeekStartDate        *time.Time `db:"last_week_start_date" json:"last_week_start_date,omitempty"`
+	LastWeekEndDate          *time.Time `db:"last_week_end_date" json:"last_week_end_date,omitempty"`
+	DayOfWeekStats           *string    `db:"day_of_week_stats" json:"day_of_week_stats,omitempty"` // JSONB as string
+	LastUpdatedAt            time.Time  `db:"last_updated_at" json:"last_updated_at"`
+	PositiveDaysCount        int        `db:"positive_days_count" json:"positive_days_count"`
+	ComebackCount            int        `db:"comeback_count" json:"comeback_count"`
+}
