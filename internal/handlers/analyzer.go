@@ -18,7 +18,16 @@ func NewAnalyzerHandler(db *sqlx.DB, encSvc *services.EncryptionService) *Analyz
 	return &AnalyzerHandler{db: db, encSvc: encSvc}
 }
 
-// MarkAnalyzerUsed marks that the user has used the analyzer feature for the first time
+// MarkAnalyzerUsed godoc
+// @Summary Mark analyzer as used
+// @Description Marks that the user has used the analyzer feature for the first time
+// @Tags analyzer
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} map[string]interface{} "Analyzer usage recorded successfully"
+// @Failure 500 {string} string "Internal server error"
+// @Router /analyzer/mark-used [post]
 func (h *AnalyzerHandler) MarkAnalyzerUsed(w http.ResponseWriter, r *http.Request) {
 	userID := r.Context().Value("userID").(int)
 

@@ -21,7 +21,17 @@ func NewUserHandler(db *sqlx.DB, encSvc *services.EncryptionService) *UserHandle
 	return &UserHandler{db: db, encSvc: encSvc}
 }
 
-// GetMe returns the current user's profile
+// GetMe godoc
+// @Summary Get current user profile
+// @Description Returns the authenticated user's profile information
+// @Tags user
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} UserDTO
+// @Failure 404 {string} string "Not found"
+// @Failure 500 {string} string "Internal server error"
+// @Router /me [get]
 func (h *UserHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 	userID := r.Context().Value("userID").(int)
 	var u models.User
@@ -53,7 +63,16 @@ func (h *UserHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(ToUserDTO(u, goalPtr))
 }
 
-// GetFeatureStatus returns onboarding/feature completion status for the current user
+// GetFeatureStatus godoc
+// @Summary Get feature status
+// @Description Returns onboarding/feature completion status for the current user
+// @Tags user
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} object{has_created_first_log=bool,first_log_created_at=string,has_used_analyzer=bool,first_analyzer_used_at=string}
+// @Failure 500 {string} string "Internal server error"
+// @Router /me/feature-status [get]
 func (h *UserHandler) GetFeatureStatus(w http.ResponseWriter, r *http.Request) {
 	userID := r.Context().Value("userID").(int)
 
@@ -83,7 +102,18 @@ func (h *UserHandler) GetFeatureStatus(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(status)
 }
 
-// UpdateMe updates provided fields on the current user's profile
+// UpdateMe godoc
+// @Summary Update user profile
+// @Description Updates provided fields on the current user's profile
+// @Tags user
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param profile body object{first_name=string,last_name=string,avatar_id=int,goal=string,start_date=string,end_date=string,is_admin=bool} true "Profile fields to update"
+// @Success 204 "No content"
+// @Failure 400 {string} string "Bad request"
+// @Failure 500 {string} string "Internal server error"
+// @Router /me [put]
 func (h *UserHandler) UpdateMe(w http.ResponseWriter, r *http.Request) {
 	userID := r.Context().Value("userID").(int)
 	var body struct {

@@ -1,0 +1,439 @@
+{
+  "info": {
+    "name": "Winning Son API",
+    "description": "API for journaling, goal tracking, and personal development metrics",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "auto-generated"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{jwt_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080/api",
+      "type": "string"
+    },
+    {
+      "key": "jwt_token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "Get admin overview",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/overview",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "overview"
+              ]
+            },
+            "description": "Returns administrative statistics and metrics (admin only)"
+          },
+          "response": []
+        }
+      ],
+      "description": "Endpoints related to admin"
+    },
+    {
+      "name": "Analyzer",
+      "item": [
+        {
+          "name": "Mark analyzer as used",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/analyzer/mark-used",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "analyzer",
+                "mark-used"
+              ]
+            },
+            "description": "Marks that the user has used the analyzer feature for the first time",
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "Endpoints related to analyzer"
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "User login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Authenticate user and return JWT token",
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "User signup",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/signup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "signup"
+              ]
+            },
+            "description": "Create a new user account",
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "Endpoints related to auth"
+    },
+    {
+      "name": "Dashboard",
+      "item": [
+        {
+          "name": "Get dashboard metrics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/dashboard",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "dashboard"
+              ],
+              "query": [
+                {
+                  "key": "local_date",
+                  "value": "",
+                  "description": "Reference date (YYYY-MM-DD)",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Aggregates and useful metrics to power the dashboard"
+          },
+          "response": []
+        },
+        {
+          "name": "Get submission history",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/dashboard/submission-history",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "dashboard",
+                "submission-history"
+              ],
+              "query": [
+                {
+                  "key": "start_date",
+                  "value": "",
+                  "description": "Start date (YYYY-MM-DD)",
+                  "disabled": false
+                },
+                {
+                  "key": "end_date",
+                  "value": "",
+                  "description": "End date (YYYY-MM-DD)",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Returns whether the user has submissions for each day in a date range (max 365 days)"
+          },
+          "response": []
+        }
+      ],
+      "description": "Endpoints related to dashboard"
+    },
+    {
+      "name": "Journal",
+      "item": [
+        {
+          "name": "List journal entries",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/journal",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "journal"
+              ],
+              "query": [
+                {
+                  "key": "start_date",
+                  "value": "",
+                  "description": "Start date (YYYY-MM-DD)",
+                  "disabled": true
+                },
+                {
+                  "key": "end_date",
+                  "value": "",
+                  "description": "End date (YYYY-MM-DD)",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Get list of journal entries with optional date range filtering"
+          },
+          "response": []
+        },
+        {
+          "name": "Create or update journal entry",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/journal",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "journal"
+              ]
+            },
+            "description": "Creates a new journal entry or updates an existing one for the same user and date",
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete journal entry",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/journal",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "journal"
+              ]
+            },
+            "description": "Removes a journal entry for the authenticated user by date"
+          },
+          "response": []
+        }
+      ],
+      "description": "Endpoints related to journal"
+    },
+    {
+      "name": "Migrate",
+      "item": [
+        {
+          "name": "Migrate user data",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/migrate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "migrate"
+              ]
+            },
+            "description": "Receives a list of journal entries and/or user profile data and upserts them for the authenticated user",
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "Endpoints related to migrate"
+    },
+    {
+      "name": "User",
+      "item": [
+        {
+          "name": "Get current user profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me"
+              ]
+            },
+            "description": "Returns the authenticated user's profile information"
+          },
+          "response": []
+        },
+        {
+          "name": "Update user profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me"
+              ]
+            },
+            "description": "Updates provided fields on the current user's profile",
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get feature status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/me/feature-status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me",
+                "feature-status"
+              ]
+            },
+            "description": "Returns onboarding/feature completion status for the current user"
+          },
+          "response": []
+        }
+      ],
+      "description": "Endpoints related to user"
+    }
+  ]
+}

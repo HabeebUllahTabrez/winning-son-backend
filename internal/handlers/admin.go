@@ -34,6 +34,17 @@ func (h *AdminHandler) mustBeAdmin(userID int) (bool, error) {
 	return isAdmin, nil
 }
 
+// Overview godoc
+// @Summary Get admin overview
+// @Description Returns administrative statistics and metrics (admin only)
+// @Tags admin
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} adminOverview
+// @Failure 403 {string} string "Forbidden"
+// @Failure 500 {string} string "Internal server error"
+// @Router /admin/overview [get]
 func (h *AdminHandler) Overview(w http.ResponseWriter, r *http.Request) {
 	userID := r.Context().Value("userID").(int)
 	if ok, err := h.mustBeAdmin(userID); err != nil {
