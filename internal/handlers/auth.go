@@ -83,6 +83,16 @@ func (h *AuthHandler) Signup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Initialize user_preferences with defaults for the new user
+	_, err = tx.Exec(`
+		INSERT INTO user_preferences (user_id, honesty_level, language_style)
+		VALUES ($1, 'honest', 'professional')
+	`, user.ID)
+	if err != nil {
+		http.Error(w, "could not initialize user preferences", http.StatusInternalServerError)
+		return
+	}
+
 	// Commit the transaction
 	if err := tx.Commit(); err != nil {
 		http.Error(w, "could not commit transaction", http.StatusInternalServerError)

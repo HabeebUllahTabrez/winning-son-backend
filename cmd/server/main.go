@@ -148,6 +148,7 @@ func main() {
 	adminHandler := handlers.NewAdminHandler(dbConn)
 	migrateHandler := handlers.NewMigrateHandler(dbConn, encSvc)
 	analyzerHandler := handlers.NewAnalyzerHandler(dbConn, encSvc)
+	preferencesHandler := handlers.NewPreferencesHandler(dbConn)
 	authMW := mw.NewAuthMiddleware([]byte(jwtSecret))
 
 	routeAPI := func(api chi.Router) {
@@ -166,6 +167,9 @@ func main() {
 			pr.Get("/me/feature-status", userHandler.GetFeatureStatus)
 			pr.Post("/analyzer/mark-used", analyzerHandler.MarkAnalyzerUsed)
 			pr.Get("/admin/overview", adminHandler.Overview)
+			pr.Get("/preferences", preferencesHandler.GetPreferences)
+			pr.Put("/preferences", preferencesHandler.UpdatePreferences)
+			pr.Get("/preferences/options", preferencesHandler.GetPreferenceOptions)
 		})
 	}
 

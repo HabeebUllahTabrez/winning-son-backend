@@ -56,3 +56,18 @@ type UserStats struct {
 	PositiveDaysCount        int        `db:"positive_days_count" json:"positive_days_count"`
 	ComebackCount            int        `db:"comeback_count" json:"comeback_count"`
 }
+
+type UserPreferences struct {
+	UserID        int       `db:"user_id" json:"user_id"`
+	HonestyLevel  string    `db:"honesty_level" json:"honesty_level"`
+	LanguageStyle string    `db:"language_style" json:"language_style"`
+	CreatedAt     time.Time `db:"created_at" json:"created_at"`
+	UpdatedAt     time.Time `db:"updated_at" json:"updated_at"`
+}
+
+type PreferenceOption struct {
+	Value       string  `db:"value" json:"value"`
+	DisplayName string  `db:"display_name" json:"display_name"`
+	Description *string `db:"description" json:"description,omitempty"`
+	SortOrder   int     `db:"sort_order" json:"sort_order"`
+}

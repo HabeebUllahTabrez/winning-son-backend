@@ -291,5 +291,76 @@ WHERE NOT EXISTS (SELECT 1 FROM user_stats WHERE user_stats.user_id = users.id)
 ON CONFLICT (user_id) DO NOTHING;`
 
 	_, err = db.ExecContext(context.Background(), ensureAllUserStats)
+	if err != nil {
+		return err
+	}
+
+	// Create preference lookup tables and user_preferences table
+	preferenceTables := `
+-- Honesty level options
+CREATE TABLE IF NOT EXISTS preference_honesty_levels (
+    value TEXT PRIMARY KEY,
+    display_name TEXT NOT NULL,
+    description TEXT,
+    sort_order INTEGER NOT NULL
+);
+
+-- Language style options
+CREATE TABLE IF NOT EXISTS preference_language_styles (
+    value TEXT PRIMARY KEY,
+    display_name TEXT NOT NULL,
+    description TEXT,
+    sort_order INTEGER NOT NULL
+);
+
+-- User preferences table
+CREATE TABLE IF NOT EXISTS user_preferences (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+
+    honesty_level TEXT NOT NULL DEFAULT 'honest'
+        REFERENCES preference_honesty_levels(value),
+    language_style TEXT NOT NULL DEFAULT 'professional'
+        REFERENCES preference_language_styles(value),
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);`
+
+	_, err = db.ExecContext(context.Background(), preferenceTables)
+	if err != nil {
+		return err
+	}
+
+	// Seed preference option data
+	seedPreferences := `
+-- Seed honesty levels
+INSERT INTO preference_honesty_levels (value, display_name, description, sort_order)
+VALUES
+    ('gentle', 'Gentle', 'Encouraging and soft feedback', 1),
+    ('honest', 'Honest', 'Direct but balanced feedback', 2),
+    ('brutally_honest', 'Brutally Honest', 'No sugar-coating, completely direct', 3)
+ON CONFLICT (value) DO NOTHING;
+
+-- Seed language styles
+INSERT INTO preference_language_styles (value, display_name, description, sort_order)
+VALUES
+    ('professional', 'Professional', 'Formal, structured tone', 1),
+    ('casual', 'Casual', 'Friendly, conversational tone', 2)
+ON CONFLICT (value) DO NOTHING;`
+
+	_, err = db.ExecContext(context.Background(), seedPreferences)
+	if err != nil {
+		return err
+	}
+
+	// Backfill user_preferences for existing users with defaults
+	backfillPreferences := `
+INSERT INTO user_preferences (user_id, honesty_level, language_style)
+SELECT id, 'honest', 'professional'
+FROM users
+WHERE NOT EXISTS (SELECT 1 FROM user_preferences WHERE user_preferences.user_id = users.id)
+ON CONFLICT (user_id) DO NOTHING;`
+
+	_, err = db.ExecContext(context.Background(), backfillPreferences)
 	return err
 }
