@@ -67,3 +67,15 @@ func ToUserDTO(u models.User, g *models.Goal) UserDTO {
 
 	return dto
 }
+
+// PreferencesDTO represents user preferences for AI personality
+type PreferencesDTO struct {
+	HonestyLevel  string `json:"honesty_level"`
+	LanguageStyle string `json:"language_style"`
+}
+
+// PreferenceOptionsDTO contains all available preference options from lookup tables
+type PreferenceOptionsDTO struct {
+	HonestyLevels  []models.PreferenceOption `json:"honesty_levels"`
+	LanguageStyles []models.PreferenceOption `json:"language_styles"`
+}
