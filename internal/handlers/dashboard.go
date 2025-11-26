@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"winsonin/internal/models"
@@ -35,18 +36,25 @@ type trendPoint struct {
 }
 
 type dashboardResponse struct {
-	ReferenceDate     string       `json:"reference_date"`
-	HasTodayEntry     bool         `json:"has_today_entry"`
-	DayKarma          Karma        `json:"day_karma"`
-	WeekKarma         Karma        `json:"week_karma"`
-	MonthKarma        Karma        `json:"month_karma"`
-	YearKarma         Karma        `json:"year_karma"`
-	EntriesThisWeek   int          `json:"entries_this_week"`
-	EntriesThisYear   int          `json:"entries_this_year"`
-	AverageMonthKarma Karma        `json:"average_month_karma"`
-	CurrentStreakDays int          `json:"current_streak_days"`
-	Last7DaysTrend    []trendPoint `json:"last7_days_trend"`
-	User              UserDTO      `json:"user"`
+	ReferenceDate                 string       `json:"reference_date"`
+	HasTodayEntry                 bool         `json:"has_today_entry"`
+	DayKarma                      Karma        `json:"day_karma"`
+	WeekKarma                     Karma        `json:"week_karma"`
+	MonthKarma                    Karma        `json:"month_karma"`
+	YearKarma                     Karma        `json:"year_karma"`
+	EntriesThisWeek               int          `json:"entries_this_week"`
+	EntriesThisYear               int          `json:"entries_this_year"`
+	AverageMonthKarma             Karma        `json:"average_month_karma"`
+	CurrentStreakDays             int          `json:"current_streak_days"`
+	Last7DaysTrend                []trendPoint `json:"last7_days_trend"`
+	User                          UserDTO      `json:"user"`
+
+	// Tier 1 Metrics
+	LongestStreakEver             int          `json:"longest_streak_ever"`
+	TotalDaysLogged               int          `json:"total_days_logged"`
+	PeakPerformanceDayOfWeek      *string      `json:"peak_performance_day_of_week,omitempty"`
+	LastWeekKarma                 Karma        `json:"last_week_karma"`
+	KarmaChangeVsLastWeek         Karma        `json:"karma_change_vs_last_week"`
 }
 
 type submissionHistoryPoint struct {
@@ -114,7 +122,16 @@ func (h *DashboardHandler) Get(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 1) Aggregate karma and counts in a single query using FILTER
+	// 1) Fetch precomputed stats from user_stats table (O(1) lookup!)
+	var stats models.UserStats
+	err = h.db.Get(&stats, `SELECT * FROM user_stats WHERE user_id=$1`, userID)
+	if err != nil && err != sql.ErrNoRows {
+		http.Error(w, "could not fetch user stats", http.StatusInternalServerError)
+		return
+	}
+	// If no stats exist, use defaults (shouldn't happen after migration backfill)
+
+	// 2) Aggregate time-dependent karma metrics (only these need runtime calculation)
 	aggQuery := `
 		SELECT
 			COALESCE(SUM(karma) FILTER (WHERE local_date = $2), 0) AS day_karma,
@@ -130,7 +147,11 @@ func (h *DashboardHandler) Get(w http.ResponseWriter, r *http.Request) {
 	var dayKarma, weekKarma, monthKarma, yearKarma float64
 	var entriesWeek, entriesYear int
 	var avgMonthKarma float64
-	if err := h.db.QueryRowx(aggQuery, userID, refDate).Scan(&dayKarma, &weekKarma, &monthKarma, &yearKarma, &entriesWeek, &entriesYear, &avgMonthKarma); err != nil {
+
+	if err := h.db.QueryRowx(aggQuery, userID, refDate).Scan(
+		&dayKarma, &weekKarma, &monthKarma, &yearKarma,
+		&entriesWeek, &entriesYear, &avgMonthKarma,
+	); err != nil {
 		http.Error(w, "could not fetch aggregates", http.StatusInternalServerError)
 		return
 	}
@@ -142,23 +163,39 @@ func (h *DashboardHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 3) Current streak up to reference date (consecutive days ending at refDate)
-	streakQuery := `
-		WITH d AS (
-			SELECT local_date FROM journal_entries WHERE user_id=$1 AND local_date <= $2
-		), g AS (
-			SELECT local_date, local_date - (ROW_NUMBER() OVER (ORDER BY local_date))::int AS grp FROM d
-		), c AS (
-			SELECT COUNT(*) AS cnt, MAX(local_date) AS maxd FROM g GROUP BY grp
-		)
-		SELECT COALESCE((SELECT cnt FROM c WHERE maxd = $2), 0)`
-	var streak int
-	if err := h.db.QueryRowx(streakQuery, userID, refDate).Scan(&streak); err != nil {
-		http.Error(w, "could not compute streak", http.StatusInternalServerError)
+	// 3) Streaks are now precomputed in user_stats! No expensive CTE needed
+	// Just use the values from stats struct
+	currentStreak := stats.CurrentStreakDays
+	longestStreak := stats.LongestStreakEver
+
+	// 4) Peak performance day of week (Tier 1 metric)
+	dayOfWeekQuery := `
+		SELECT
+			TO_CHAR(local_date, 'Day') AS day_name,
+			AVG(karma) AS avg_karma
+		FROM journal_entries
+		WHERE user_id = $1
+		GROUP BY EXTRACT(DOW FROM local_date), TO_CHAR(local_date, 'Day')
+		ORDER BY avg_karma DESC
+		LIMIT 1`
+	var peakDayName sql.NullString
+	var peakDayKarma sql.NullFloat64
+	if err := h.db.QueryRowx(dayOfWeekQuery, userID).Scan(&peakDayName, &peakDayKarma); err != nil && err != sql.ErrNoRows {
+		http.Error(w, "could not compute peak day of week", http.StatusInternalServerError)
 		return
 	}
 
-	// 4) Last 7 days trend ending at reference date (inclusive)
+	// 5) Karma change vs last week (Tier 1 metric)
+	// Use precomputed last_week_karma from user_stats
+	var karmaChangePercent float64
+	if stats.LastWeekKarma > 0 {
+		karmaChangePercent = ((weekKarma - stats.LastWeekKarma) / stats.LastWeekKarma) * 100
+	} else if weekKarma > 0 {
+		// If there was no karma last week but there is this week, it's 100% increase
+		karmaChangePercent = 100
+	}
+
+	// 6) Last 7 days trend ending at reference date (inclusive)
 	trendRows, err := h.db.Queryx(`
 		SELECT d::date AS local_date, COALESCE(e.karma, 0) AS karma
 		FROM generate_series($2::date - INTERVAL '6 days', $2::date, INTERVAL '1 day') AS d
@@ -178,6 +215,13 @@ func (h *DashboardHandler) Get(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Prepare peak day of week string (trim whitespace from PostgreSQL TO_CHAR)
+	var peakDayOfWeekPtr *string
+	if peakDayName.Valid {
+		trimmedDay := strings.TrimSpace(peakDayName.String)
+		peakDayOfWeekPtr = &trimmedDay
+	}
+
 	resp := dashboardResponse{
 		ReferenceDate:     refDate.Format("2006-01-02"),
 		HasTodayEntry:     hasToday,
@@ -188,9 +232,16 @@ func (h *DashboardHandler) Get(w http.ResponseWriter, r *http.Request) {
 		EntriesThisWeek:   entriesWeek,
 		EntriesThisYear:   entriesYear,
 		AverageMonthKarma: Karma(avgMonthKarma),
-		CurrentStreakDays: streak,
+		CurrentStreakDays: currentStreak,
 		Last7DaysTrend:    trend,
 		User:              ToUserDTO(user, goalPtr),
+
+		// Tier 1 Metrics (mix of precomputed and runtime)
+		LongestStreakEver:           longestStreak,           // Precomputed ✅
+		TotalDaysLogged:             stats.TotalDaysLogged,   // Precomputed ✅
+		PeakPerformanceDayOfWeek:    peakDayOfWeekPtr,             // Runtime (cached in future)
+		LastWeekKarma:               Karma(stats.LastWeekKarma),   // Precomputed ✅
+		KarmaChangeVsLastWeek:       Karma(karmaChangePercent),    // Derived
 	}
 
 	w.Header().Set("Content-Type", "application/json")

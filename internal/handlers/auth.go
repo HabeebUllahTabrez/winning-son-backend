@@ -58,10 +58,34 @@ func (h *AuthHandler) Signup(w http.ResponseWriter, r *http.Request) {
 	encryptedEmail := tempUser.Email
 	emailBlindIndex := tempUser.EmailBlindIndex
 
+	// Start a transaction to create both user and user_stats
+	tx, err := h.db.Beginx()
+	if err != nil {
+		http.Error(w, "could not start transaction", http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
 	var user models.User
-	err = h.db.QueryRowx(`INSERT INTO users (email, email_blind_index, password_hash) VALUES ($1, $2, $3) RETURNING id, email, email_blind_index, password_hash, created_at, first_name, last_name, avatar_id, is_admin`, encryptedEmail, emailBlindIndex, string(hashed)).StructScan(&user)
+	err = tx.QueryRowx(`INSERT INTO users (email, email_blind_index, password_hash) VALUES ($1, $2, $3) RETURNING id, email, email_blind_index, password_hash, created_at, first_name, last_name, avatar_id, is_admin`, encryptedEmail, emailBlindIndex, string(hashed)).StructScan(&user)
 	if err != nil {
 		http.Error(w, "could not create user", http.StatusBadRequest)
+		return
+	}
+
+	// Initialize user_stats for the new user
+	_, err = tx.Exec(`
+		INSERT INTO user_stats (user_id, total_days_logged, total_karma, current_streak_days, longest_streak_ever, last_week_karma, positive_days_count, comeback_count)
+		VALUES ($1, 0, 0, 0, 0, 0, 0, 0)
+	`, user.ID)
+	if err != nil {
+		http.Error(w, "could not initialize user stats", http.StatusInternalServerError)
+		return
+	}
+
+	// Commit the transaction
+	if err := tx.Commit(); err != nil {
+		http.Error(w, "could not commit transaction", http.StatusInternalServerError)
 		return
 	}
 
